@@ -1,0 +1,4433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>RADAR MINES ― 距離捜査ファイル</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<!-- SkyWay (P2P通信) : オンライン対戦(Dual Mines / Open Mines)に使用 -->
+<script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/token/dist/skyway_token-latest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room-latest.js"></script>
+<style>
+  :root{
+    --bg:#0d1226;
+    --bg-grad:#141b38;
+    --panel:#1a2140;
+    --panel-alt:#212a4d;
+    --panel-line: rgba(232,185,74,0.14);
+    --accent:#e8b94a;
+    --accent-soft:rgba(232,185,74,0.16);
+    --good:#4fbf8b;
+    --bad:#e1523d;
+    --text:#eef0f6;
+    --text-dim:#9099b8;
+    --text-faint:#6a7396;
+    --radius:14px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100%;
+    background:
+      radial-gradient(1200px 800px at 50% -10%, var(--bg-grad), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Noto Sans JP','Zen Kaku Gothic New',sans-serif;
+    overflow-x:hidden;
+    -webkit-user-select:none; user-select:none;
+    touch-action: manipulation;
+  }
+  .display{ font-family:'Zen Kaku Gothic New', sans-serif; }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+
+  #app{
+    max-width:520px;
+    margin:0 auto;
+    min-height:100vh;
+    padding: calc(18px + var(--safe-top)) 18px calc(18px + var(--safe-bottom));
+    display:flex;
+    flex-direction:column;
+  }
+
+  .screen{ display:none; flex:1; flex-direction:column; animation: fadein .28s ease; }
+  .screen.active{ display:flex; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+
+  /* ---------- HOME ---------- */
+  #screen-home{ align-items:center; text-align:center; }
+  .home-center{ flex:1; width:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; }
+  .brand-eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    letter-spacing:.35em;
+    font-size:11px;
+    color:var(--accent);
+    opacity:.85;
+    margin-bottom:2px;
+  }
+  .brand-title{
+    font-size:44px;
+    font-weight:900;
+    letter-spacing:.02em;
+    line-height:1.05;
+    margin:4px 0 2px;
+    background:linear-gradient(180deg, #fff, var(--accent) 140%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .brand-sub{ color:var(--text-dim); font-size:14px; margin-bottom:22px; }
+
+  .radar-mark{
+    width:126px; height:126px; border-radius:50%;
+    position:relative;
+    background: radial-gradient(circle at 50% 50%, rgba(232,185,74,.06), transparent 70%);
+    border:1px solid var(--panel-line);
+    margin-bottom:18px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .radar-mark::before, .radar-mark::after{
+    content:""; position:absolute; border-radius:50%; border:1px solid var(--panel-line);
+  }
+  .radar-mark::before{ width:88px; height:88px; }
+  .radar-mark::after{ width:50px; height:50px; }
+  .radar-sweep{
+    position:absolute; inset:0; border-radius:50%;
+    background: conic-gradient(from 0deg, rgba(232,185,74,.55), transparent 30%);
+    animation: sweep 3.2s linear infinite;
+    -webkit-mask-image: radial-gradient(circle, black 60%, transparent 100%);
+            mask-image: radial-gradient(circle, black 60%, transparent 100%);
+  }
+  @keyframes sweep{ to{ transform:rotate(360deg); } }
+  .radar-center{ width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); z-index:2; }
+
+  .name-field{
+    width:100%; max-width:280px;
+    margin: 6px 0 20px;
+  }
+  .name-field label{ display:block; font-size:12px; color:var(--text-faint); margin-bottom:6px; letter-spacing:.08em; }
+  .name-field input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--panel-line);
+    background:var(--panel); color:var(--text); font-size:15px; text-align:center;
+    font-family:'Noto Sans JP',sans-serif;
+  }
+  .name-field input:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+
+  .btn-row{ display:flex; flex-direction:column; gap:12px; width:100%; max-width:280px; }
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    padding:16px 20px; border-radius:12px; font-size:16px; font-weight:700;
+    font-family:'Zen Kaku Gothic New',sans-serif; letter-spacing:.03em;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:linear-gradient(180deg, #f0c766, var(--accent)); color:#241a04; box-shadow:0 6px 18px rgba(232,185,74,.25); }
+  .btn-ghost{ background:var(--panel); color:var(--text); border:1px solid var(--panel-line); }
+  .btn-danger{ background:var(--bad); color:#fff; }
+  .btn-good{ background:var(--good); color:#08281c; }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; filter:grayscale(.3); }
+  .btn-sm{ padding:10px 14px; font-size:13px; border-radius:9px; }
+
+  /* ---------- GAME HUD ---------- */
+  #screen-game{ gap:14px; }
+  .hud{
+    display:grid; grid-template-columns: repeat(4,1fr);
+    gap:8px;
+  }
+  .hud-item{
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px;
+    padding:8px 6px; text-align:center;
+  }
+  .hud-item .v{ font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:700; }
+  .hud-item .l{ font-size:10px; color:var(--text-faint); letter-spacing:.06em; margin-top:2px; }
+  .hud-item.warn .v{ color:var(--bad); }
+  .hud-item.time.low .v{ color:var(--bad); animation: pulse .8s infinite; }
+  @keyframes pulse{ 50%{ opacity:.4; } }
+
+  .mode-banner{
+    text-align:center; font-size:13px; padding:9px 12px; border-radius:10px;
+    background:var(--accent-soft); color:var(--accent); font-weight:700; letter-spacing:.04em;
+    border:1px solid rgba(232,185,74,.35);
+    display:none;
+  }
+  .mode-banner.show{ display:block; }
+
+  .board-wrap{ display:flex; justify-content:center; flex:1; align-items:center; }
+  #board{
+    display:grid;
+    gap:4px;
+    width:min(94vw, 440px);
+    aspect-ratio:1/1;
+    grid-auto-rows: 1fr;
+  }
+  .cell{
+    position:relative;
+    background:var(--panel);
+    border:1px solid var(--panel-line);
+    border-radius:7px;
+    aspect-ratio:1/1;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace;
+    font-size:clamp(13px, 3.6vw, 18px);
+    font-weight:700;
+    cursor:pointer;
+    transition: background .15s ease, transform .1s ease;
+    overflow:hidden;
+  }
+  .cell.closed:active{ transform:scale(.93); background:var(--panel-alt); }
+  .cell.opened{ background:rgba(255,255,255,.02); border-color:rgba(255,255,255,.06); cursor:default; }
+  .cell.guessable{ box-shadow: inset 0 0 0 1px rgba(232,185,74,.25); }
+  .cell.flagged{ background:var(--accent-soft); border-color:var(--accent); }
+  .cell.flagged::after{ content:"⚑"; color:var(--accent); font-size:1.1em; }
+  .cell .d1{ color:#7fb8e8; } .cell .d2{ color:#63c9a3; } .cell .d3{ color:var(--accent); }
+  .cell .d4{ color:var(--bad); position:relative; }
+  .cell .d5{ color:var(--bad); } .cell .d6{ color:var(--bad); }
+  .cell.dist6-cell{ animation: radarpulse 1.8s ease-in-out infinite; }
+  @keyframes radarpulse{ 0%,100%{ box-shadow: inset 0 0 0 1px rgba(225,82,61,.15);} 50%{ box-shadow: inset 0 0 0 1px rgba(225,82,61,.55);} }
+  .cell.bomb{ background:rgba(225,82,61,.14); border-color:var(--bad); }
+  .cell.bomb::after{ content:"✹"; color:var(--bad); font-size:1.15em; }
+  .cell.bomb.exploded{ background:rgba(225,82,61,.32); animation: shake .35s ease; }
+  @keyframes shake{ 0%,100%{ transform:translate(0,0);} 20%{ transform:translate(-3px,2px);} 40%{ transform:translate(3px,-2px);} 60%{ transform:translate(-2px,1px);} 80%{ transform:translate(2px,-1px);} }
+  .cell.bomb-marker-correct::after{ content:"✔"; color:var(--good); }
+  .cell.bomb-marker-wrong::after{ content:"✖"; color:var(--bad); }
+
+  .cell.revealing{
+    animation: revealPop .48s cubic-bezier(.34,1.56,.64,1) both;
+  }
+  @keyframes revealPop{
+    0%{ transform:scale(.35) rotate(-10deg); opacity:0; }
+    55%{ transform:scale(1.12) rotate(3deg); opacity:1; }
+    100%{ transform:scale(1) rotate(0deg); opacity:1; }
+  }
+  .mode-banner.revealing-banner{ background:rgba(255,255,255,.06); color:var(--text-dim); border-color:var(--panel-line); }
+
+  .guess-actions{ display:flex; gap:10px; }
+  .guess-actions .btn{ flex:1; }
+
+  /* ---------- RESULT ---------- */
+  #screen-result{ gap:16px; padding-top:6px; }
+  .result-score{ text-align:center; margin:6px 0 4px; }
+  .result-score .label{ font-size:12px; color:var(--text-faint); letter-spacing:.12em; }
+  .result-score .num{ font-family:'JetBrains Mono',monospace; font-size:52px; font-weight:800; color:var(--accent); }
+  .breakdown{ background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius); padding:6px 4px; }
+  .breakdown-row{ display:flex; justify-content:space-between; padding:9px 14px; font-size:14px; border-bottom:1px solid rgba(255,255,255,.05); }
+  .breakdown-row:last-child{ border-bottom:none; }
+  .breakdown-row .k{ color:var(--text-dim); }
+  .breakdown-row .v{ font-family:'JetBrains Mono',monospace; font-weight:700; }
+  .breakdown-row .v.pos{ color:var(--good); }
+  .breakdown-row .v.neg{ color:var(--bad); }
+  .rank-pill{ text-align:center; font-size:13px; color:var(--text-dim); }
+  .rank-pill b{ color:var(--accent); font-size:16px; }
+
+  /* ---------- RANKING ---------- */
+  #screen-ranking{ gap:12px; }
+  .ranking-header{ display:flex; align-items:center; justify-content:space-between; }
+  .ranking-list{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:8px; padding-bottom:8px; }
+  .rank-row{
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px;
+    padding:10px 12px; display:grid; grid-template-columns: 34px 1fr auto; align-items:center; gap:10px;
+  }
+  .rank-row.me{ border-color:var(--accent); background:var(--accent-soft); }
+  .rank-num{ font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; color:var(--accent); text-align:center; }
+  .rank-name{ font-weight:700; font-size:14px; }
+  .rank-meta{ font-size:10.5px; color:var(--text-faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap; }
+  .rank-score{ font-family:'JetBrains Mono',monospace; font-weight:800; font-size:16px; text-align:right; }
+  .rank-section-title{
+    font-family:'Zen Kaku Gothic New',sans-serif; font-size:13px; font-weight:700;
+    color:var(--text-dim); letter-spacing:.04em; padding:10px 2px 2px;
+  }
+  .rank-section-title:first-child{ padding-top:2px; }
+  .empty-note{ text-align:center; color:var(--text-faint); font-size:13px; margin-top:30px; }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .topbar h2{ font-family:'Zen Kaku Gothic New'; font-size:18px; margin:0; }
+
+  /* ---------- RULEBOOK ---------- */
+  #screen-rules{ gap:12px; }
+  .rules-scroll{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:12px; padding-bottom:12px; }
+  .rule-card{ background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius); padding:14px 16px; text-align:left; }
+  .rule-card h3{ margin:0 0 8px; font-size:14px; color:var(--accent); font-family:'Zen Kaku Gothic New',sans-serif; letter-spacing:.02em; }
+  .rule-card p{ margin:0 0 6px; font-size:13px; line-height:1.65; color:var(--text-dim); }
+  .rule-card ul{ margin:0; padding-left:18px; }
+  .rule-card li{ font-size:13px; line-height:1.65; color:var(--text-dim); margin-bottom:4px; }
+  .rule-card strong{ color:var(--text); }
+  .rule-card.tip-card{ border-color:rgba(79,191,139,.35); background:rgba(79,191,139,.06); }
+  .rule-card.tip-card h3{ color:var(--good); }
+
+  /* ---------- RULEBOOK TABS ---------- */
+  .rule-tabs{ display:flex; gap:8px; margin-bottom:2px; }
+  .rule-tab{
+    flex:1; text-align:center; padding:9px 8px; border-radius:9px; font-size:13px; font-weight:700;
+    background:var(--panel); border:1px solid var(--panel-line); color:var(--text-dim); cursor:pointer;
+  }
+  .rule-tab.active{ background:var(--accent-soft); color:var(--accent); border-color:var(--accent); }
+
+  /* ---------- DUAL MINES: in-game bars ---------- */
+  .dual-opponent-bar{
+    text-align:center; font-size:12.5px; font-weight:700; letter-spacing:.04em;
+    color:var(--text-dim); background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:9px; padding:6px 10px;
+  }
+  .dual-guess-banner{
+    background:rgba(225,82,61,.14); color:var(--bad); border-color:rgba(225,82,61,.4);
+  }
+
+  /* ---------- OPEN MINES: turn indicator / guess banner ---------- */
+  .open-turn-bar{
+    text-align:center; font-size:13px; font-weight:700; letter-spacing:.03em;
+    padding:9px 12px; border-radius:10px; border:1px solid var(--panel-line);
+    background:var(--panel); color:var(--text-dim);
+  }
+  .open-turn-bar.my-turn{ background:rgba(79,191,139,.14); color:var(--good); border-color:rgba(79,191,139,.4); }
+  .open-turn-bar.opp-turn{ background:var(--panel); color:var(--text-dim); }
+  .open-guess-banner{
+    background:var(--accent-soft); color:var(--accent); border-color:rgba(232,185,74,.4);
+  }
+  #open-hud .hud-item:nth-child(1) .v{ color:var(--good); }
+  #open-hud .hud-item:nth-child(2) .v{ color:var(--text-dim); }
+
+  /* ---------- DUAL MINES: lobby ---------- */
+  .dual-lobby-body{ flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-bottom:12px; }
+  .dual-lead{ font-size:13px; color:var(--text-dim); text-align:center; margin:0 0 2px; }
+
+  /* ---------- DUAL MINES: waiting / countdown ---------- */
+  #screen-dual-waiting{ align-items:center; text-align:center; }
+  .dual-code-display{
+    font-family:'JetBrains Mono',monospace; font-size:40px; font-weight:800; letter-spacing:.18em;
+    color:var(--accent); margin:6px 0;
+  }
+  .dual-status-text{ font-size:14px; color:var(--text-dim); margin-top:4px; }
+  .dual-countdown-number{
+    font-family:'JetBrains Mono',monospace; font-weight:800; font-size:88px; color:var(--accent);
+    margin-top:10px; animation: countpop .5s ease;
+  }
+  @keyframes countpop{ 0%{ transform:scale(.4); opacity:0; } 60%{ transform:scale(1.15); opacity:1; } 100%{ transform:scale(1); } }
+
+  /* ---------- DUAL MINES: result ---------- */
+  .dual-outcome{
+    text-align:center; font-family:'Zen Kaku Gothic New',sans-serif; font-size:26px; font-weight:800;
+    color:var(--accent); margin:4px 0 8px;
+  }
+  .dual-outcome.win{ color:var(--good); }
+  .dual-outcome.lose{ color:var(--bad); }
+  .dual-vs-row{ display:flex; align-items:center; gap:8px; }
+  .dual-side-card{
+    flex:1; background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius);
+    padding:16px 10px; text-align:center;
+  }
+  .dual-side-card.winner{ border-color:var(--good); background:rgba(79,191,139,.08); }
+  .dual-side-label{ font-size:11px; letter-spacing:.1em; color:var(--text-faint); margin-bottom:6px; }
+  .dual-side-score{ font-size:30px; font-weight:800; }
+  .dual-side-meta{ font-size:11px; color:var(--text-dim); margin-top:6px; line-height:1.6; }
+  .dual-vs-mark{ font-family:'JetBrains Mono',monospace; font-weight:800; color:var(--text-faint); font-size:13px; }
+
+  /* ---------- SENTINEL MINES ---------- */
+  .sentinel-role-banner{
+    text-align:center; font-size:13px; font-weight:700; letter-spacing:.04em;
+    padding:9px 12px; border-radius:10px; border:1px solid var(--panel-line);
+    background:var(--panel); color:var(--text-dim);
+  }
+  .sentinel-role-banner.guardian{ background:rgba(232,185,74,.14); color:var(--accent); border-color:rgba(232,185,74,.4); }
+  .sentinel-role-banner.hunter{ background:rgba(79,191,139,.14); color:var(--good); border-color:rgba(79,191,139,.4); }
+  .sentinel-role-banner.spectate{ background:var(--panel); color:var(--text-faint); }
+
+  .sentinel-timer{
+    text-align:center; font-family:'JetBrains Mono',monospace; font-size:34px; font-weight:800;
+    color:var(--accent); margin:2px 0;
+  }
+  .sentinel-timer.low{ color:var(--bad); animation: pulse .8s infinite; }
+
+  .sentinel-setup-status{ text-align:center; font-size:13px; color:var(--text-dim); margin-bottom:2px; }
+
+  .cell.sentinel-core-preview{ box-shadow: inset 0 0 0 2px var(--accent); background:rgba(232,185,74,.16); }
+  .cell.sentinel-core-invalid{ box-shadow: inset 0 0 0 2px var(--bad); background:rgba(225,82,61,.14); }
+  .cell.sentinel-core-placed{ box-shadow: inset 0 0 0 2px var(--accent); background:rgba(232,185,74,.22); }
+  .cell.sentinel-core-placed::after{ content:"🛡"; }
+  .cell.sentinel-mine-placed{ box-shadow: inset 0 0 0 2px var(--bad); background:rgba(225,82,61,.16); }
+  .cell.sentinel-mine-placed::after{ content:"✹"; color:var(--bad); }
+  .cell.sentinel-radar-peek{ background:rgba(127,184,232,.18); box-shadow: inset 0 0 0 1px rgba(127,184,232,.5); }
+
+  .sentinel-hint-panel{
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius);
+    padding:10px; display:flex; flex-direction:column; gap:8px;
+  }
+  .sentinel-hint-title{ font-size:12px; color:var(--text-faint); letter-spacing:.06em; text-align:center; }
+  .sentinel-hint-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .sentinel-hint-btn{
+    background:var(--panel-alt); border:1px solid var(--panel-line); border-radius:9px;
+    padding:10px 8px; text-align:left; color:var(--text); cursor:pointer;
+  }
+  .sentinel-hint-btn .t{ font-weight:700; font-size:12.5px; color:var(--accent); }
+  .sentinel-hint-btn .d{ font-size:10.5px; color:var(--text-dim); margin-top:3px; line-height:1.4; }
+  .sentinel-hint-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .sentinel-radar-banner{
+    text-align:center; font-size:13px; font-weight:700; padding:9px 12px; border-radius:10px;
+    background:rgba(127,184,232,.16); color:#7fb8e8; border:1px solid rgba(127,184,232,.4);
+  }
+
+  .sentinel-spectate-note{
+    text-align:center; font-size:12px; color:var(--text-faint); padding:4px;
+  }
+
+  .sentinel-round-title{
+    text-align:center; font-family:'Zen Kaku Gothic New',sans-serif; font-size:16px; font-weight:800;
+    color:var(--accent); letter-spacing:.04em; margin-bottom:2px;
+  }
+
+  .sentinel-score-table{
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius);
+    padding:6px 4px;
+  }
+  .sentinel-score-row{
+    display:flex; justify-content:space-between; padding:8px 12px; font-size:12.5px;
+    border-bottom:1px solid rgba(255,255,255,.05);
+  }
+  .sentinel-score-row:last-child{ border-bottom:none; }
+  .sentinel-score-row .k{ color:var(--text-dim); }
+  .sentinel-score-row .v{ font-family:'JetBrains Mono',monospace; font-weight:700; }
+  .sentinel-total-row{
+    display:flex; justify-content:space-between; padding:10px 12px; font-size:15px; font-weight:800;
+    background:var(--accent-soft); border-radius:9px; margin-top:6px;
+  }
+
+  .toast{
+    position:fixed; left:50%; bottom:calc(24px + var(--safe-bottom)); transform:translateX(-50%);
+    background:var(--panel-alt); color:var(--text); border:1px solid var(--panel-line);
+    padding:10px 16px; border-radius:10px; font-size:13px; opacity:0; pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease; z-index:50; max-width:80vw; text-align:center;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ HOME ============ -->
+  <section id="screen-home" class="screen active">
+    <div class="home-center">
+      <div class="brand-eyebrow">CHEBYSHEV DISTANCE INVESTIGATION</div>
+      <div class="brand-title display">RADAR<br>MINES</div>
+      <div class="brand-sub">距離だけを手がかりに、盤面に潜む5個の爆弾を暴け。</div>
+
+      <div class="radar-mark">
+        <div class="radar-sweep"></div>
+        <div class="radar-center"></div>
+      </div>
+
+      <div class="name-field">
+        <label for="playerName">捜査官名（ランキング／対戦表示名）</label>
+        <input id="playerName" maxlength="12" placeholder="PLAYER" autocomplete="off">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-start">🕵️ Solo Mines</button>
+        <button class="btn btn-good" id="btn-dual-home">⚔️ 対戦バトル</button>
+        <button class="btn btn-ghost" id="btn-ranking-home">🏆 Ranking</button>
+        <button class="btn btn-ghost" id="btn-rules-home">📖 ルールブック</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="screen-game" class="screen">
+    <div class="hud" id="normal-hud">
+      <div class="hud-item"><div class="v mono" id="hud-score">0</div><div class="l">SCORE</div></div>
+      <div class="hud-item time" id="hud-time-box"><div class="v mono" id="hud-time">480</div><div class="l">TIME</div></div>
+      <div class="hud-item warn"><div class="v mono" id="hud-explosions">0/5</div><div class="l">爆発</div></div>
+      <div class="hud-item"><div class="v mono" id="hud-guess">5</div><div class="l">残GUESS</div></div>
+    </div>
+
+    <div class="hud" id="open-hud" style="display:none;">
+      <div class="hud-item"><div class="v mono" id="open-my-time">180</div><div class="l">自分</div></div>
+      <div class="hud-item"><div class="v mono" id="open-opp-time">180</div><div class="l">相手</div></div>
+      <div class="hud-item"><div class="v mono" id="open-score">0</div><div class="l">SCORE</div></div>
+      <div class="hud-item warn"><div class="v mono" id="open-explosions">0/5</div><div class="l">爆発</div></div>
+    </div>
+    <div class="open-turn-bar" id="open-turn-bar" style="display:none;"></div>
+    <div class="mode-banner open-guess-banner" id="open-guess-banner" style="display:none;"></div>
+
+    <div class="dual-opponent-bar" id="dual-opponent-bar" style="display:none;">
+      <span id="dual-opponent-name">VS ---</span>
+    </div>
+    <div class="mode-banner dual-guess-banner" id="dual-guess-banner" style="display:none;"></div>
+
+    <div class="mode-banner" id="mode-banner">GUESSモード（タイマー停止中）― 爆弾だと思うマスに旗を立てて確定しよう</div>
+
+    <div class="board-wrap"><div id="board"></div></div>
+
+    <div class="guess-actions" id="guess-actions-normal">
+      <button class="btn btn-good" id="btn-guess-enter">GUESS</button>
+    </div>
+    <div class="guess-actions" id="guess-actions-mode" style="display:none;">
+      <button class="btn btn-danger" id="btn-guess-confirm">GUESS 確定</button>
+    </div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section id="screen-result" class="screen">
+    <div class="topbar"><h2 class="display">捜査結果</h2></div>
+    <div class="result-score">
+      <div class="label">FINAL SCORE</div>
+      <div class="num mono" id="result-final-score">0</div>
+    </div>
+    <div class="rank-pill" id="result-rank-pill"></div>
+    <div class="breakdown" id="result-breakdown"></div>
+    <div class="btn-row" style="max-width:none; margin-top:auto;">
+      <button class="btn btn-primary" id="btn-retry">ホームへ戻る</button>
+      <button class="btn btn-ghost" id="btn-result-ranking">ランキングを見る</button>
+    </div>
+  </section>
+
+  <!-- ============ BATTLE MODE SELECT ============ -->
+  <section id="screen-battle-select" class="screen">
+    <div class="topbar">
+      <h2 class="display">⚔️ 対戦バトル</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-battle-select-back">閉じる</button>
+    </div>
+    <div class="dual-lobby-body">
+      <div class="rule-card">
+        <h3>⚔️ Dual Mines</h3>
+        <p>2人が<strong>同じ盤面</strong>をそれぞれ独立にプレイし、スコアを競います。相手の進行は見えません。</p>
+        <button class="btn btn-primary" id="btn-select-dual" style="width:100%;">Dual Minesで対戦</button>
+      </div>
+      <div class="rule-card">
+        <h3>🔓 Open Mines</h3>
+        <p>2人で<strong>1つの盤面を共有</strong>し、交互にマスを開けます。「あと1マス開けるか、今GUESSするか」の読み合いモード。</p>
+        <button class="btn btn-good" id="btn-select-open" style="width:100%;">Open Minesで対戦</button>
+      </div>
+      <div class="rule-card">
+        <h3>🛡️ SENTINEL MINES</h3>
+        <p>非対称の2ラウンド制対戦。<strong>Guardian</strong>が盤面に地雷を仕込み、<strong>Hunter</strong>がそれを暴く。ラウンドごとに役割交代し、合計スコアで勝敗を決める心理戦モード。</p>
+        <button class="btn btn-danger" id="btn-select-sentinel" style="width:100%;">SENTINEL MINESで対戦</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DUAL LOBBY ============ -->
+  <section id="screen-dual-lobby" class="screen">
+    <div class="topbar">
+      <h2 class="display">⚔️ Dual Mines</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-dual-lobby-back">閉じる</button>
+    </div>
+    <div class="dual-lobby-body">
+      <p class="dual-lead">同じ盤面を2人で解いてスコアを競う対戦モードです。</p>
+
+      <div class="rule-card">
+        <h3>部屋を作る</h3>
+        <p>5桁のルームコードを発行します。相手にコードを伝えて参加してもらいましょう。</p>
+        <button class="btn btn-primary" id="btn-dual-create" style="width:100%;">部屋を作る</button>
+      </div>
+
+      <div class="rule-card">
+        <h3>参加する</h3>
+        <p>相手から教えてもらった5桁のコードを入力してください。</p>
+        <div class="name-field" style="margin-bottom:10px;">
+          <input id="dual-join-code" maxlength="5" inputmode="numeric" placeholder="12345" autocomplete="off" style="letter-spacing:.3em; text-align:center; font-family:'JetBrains Mono',monospace; font-size:18px;">
+        </div>
+        <button class="btn btn-good" id="btn-dual-join" style="width:100%;">参加する</button>
+      </div>
+
+      <button class="btn btn-ghost btn-sm" id="btn-dual-rules-link" style="margin-top:4px;">📖 Dual Minesのルールを見る</button>
+    </div>
+  </section>
+
+  <!-- ============ OPEN MINES LOBBY ============ -->
+  <section id="screen-open-lobby" class="screen">
+    <div class="topbar">
+      <h2 class="display">🔓 Open Mines</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-open-lobby-back">閉じる</button>
+    </div>
+    <div class="dual-lobby-body">
+      <p class="dual-lead">1つの盤面を共有し、交互にマスを開ける読み合い対戦です。</p>
+
+      <div class="rule-card">
+        <h3>部屋を作る</h3>
+        <p>5桁のルームコードを発行します。相手にコードを伝えて参加してもらいましょう。</p>
+        <button class="btn btn-primary" id="btn-open-create" style="width:100%;">部屋を作る</button>
+      </div>
+
+      <div class="rule-card">
+        <h3>参加する</h3>
+        <p>相手から教えてもらった5桁のコードを入力してください。</p>
+        <div class="name-field" style="margin-bottom:10px;">
+          <input id="open-join-code" maxlength="5" inputmode="numeric" placeholder="12345" autocomplete="off" style="letter-spacing:.3em; text-align:center; font-family:'JetBrains Mono',monospace; font-size:18px;">
+        </div>
+        <button class="btn btn-good" id="btn-open-join" style="width:100%;">参加する</button>
+      </div>
+
+      <button class="btn btn-ghost btn-sm" id="btn-open-rules-link" style="margin-top:4px;">📖 Open Minesのルールを見る</button>
+    </div>
+  </section>
+
+  <!-- ============ SENTINEL MINES LOBBY ============ -->
+  <section id="screen-sentinel-lobby" class="screen">
+    <div class="topbar">
+      <h2 class="display">🛡️ SENTINEL MINES</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-sentinel-lobby-back">閉じる</button>
+    </div>
+    <div class="dual-lobby-body">
+      <p class="dual-lead">Guardianが盤面を作り、Hunterがそれを暴く。2ラウンドで役割交代する心理戦モードです。</p>
+
+      <div class="rule-card">
+        <h3>部屋を作る</h3>
+        <p>5桁のルームコードを発行します。相手にコードを伝えて参加してもらいましょう。あなたが「Player A」になります。</p>
+        <button class="btn btn-primary" id="btn-sentinel-create" style="width:100%;">部屋を作る</button>
+      </div>
+
+      <div class="rule-card">
+        <h3>参加する</h3>
+        <p>相手から教えてもらった5桁のコードを入力してください。あなたが「Player B」になります。</p>
+        <div class="name-field" style="margin-bottom:10px;">
+          <input id="sentinel-join-code" maxlength="5" inputmode="numeric" placeholder="12345" autocomplete="off" style="letter-spacing:.3em; text-align:center; font-family:'JetBrains Mono',monospace; font-size:18px;">
+        </div>
+        <button class="btn btn-good" id="btn-sentinel-join" style="width:100%;">参加する</button>
+      </div>
+
+      <button class="btn btn-ghost btn-sm" id="btn-sentinel-rules-link" style="margin-top:4px;">📖 SENTINEL MINESのルールを見る</button>
+    </div>
+  </section>
+
+  <!-- ============ DUAL WAITING / COUNTDOWN ============ -->
+  <section id="screen-dual-waiting" class="screen">
+    <div class="home-center">
+      <div class="radar-mark">
+        <div class="radar-sweep"></div>
+        <div class="radar-center"></div>
+      </div>
+      <div id="dual-waiting-code" class="dual-code-display" style="display:none;"></div>
+      <div id="dual-waiting-status" class="dual-status-text">準備中…</div>
+      <div id="dual-countdown-number" class="dual-countdown-number" style="display:none;"></div>
+    </div>
+    <div class="btn-row" style="margin:0 auto;">
+      <button class="btn btn-ghost btn-sm" id="btn-dual-waiting-cancel">キャンセルしてホームへ</button>
+    </div>
+  </section>
+
+  <!-- ============ DUAL RESULT ============ -->
+  <section id="screen-dual-result" class="screen">
+    <div class="topbar"><h2 class="display">対戦結果</h2></div>
+    <div class="dual-outcome" id="dual-outcome-banner">対戦中…</div>
+    <div class="dual-vs-row">
+      <div class="dual-side-card" id="dual-my-card">
+        <div class="dual-side-label">YOU</div>
+        <div class="dual-side-score mono" id="dual-my-score">0</div>
+        <div class="dual-side-meta" id="dual-my-meta"></div>
+      </div>
+      <div class="dual-vs-mark">VS</div>
+      <div class="dual-side-card" id="dual-opp-card">
+        <div class="dual-side-label" id="dual-opp-label">OPPONENT</div>
+        <div class="dual-side-score mono" id="dual-opp-score">…</div>
+        <div class="dual-side-meta" id="dual-opp-meta">相手の結果を待っています…</div>
+      </div>
+    </div>
+    <div class="btn-row" style="max-width:none; margin-top:auto;">
+      <button class="btn btn-primary" id="btn-dual-rematch">リマッチ</button>
+      <button class="btn btn-ghost" id="btn-dual-home-back">ホームへ戻る</button>
+    </div>
+  </section>
+
+  <!-- ============ SENTINEL MINES: GUARDIAN SETUP ============ -->
+  <section id="screen-sentinel-guardian" class="screen">
+    <div class="sentinel-role-banner guardian">🛡️ あなたはGuardian（Round <span id="sentinel-g-round">1</span>）</div>
+    <div class="sentinel-timer" id="sentinel-g-timer">60</div>
+    <div class="sentinel-setup-status" id="sentinel-g-status">Core Mine（2×2）を配置してください</div>
+    <div class="board-wrap"><div id="sentinel-guardian-board"></div></div>
+    <div class="btn-row" style="max-width:none;">
+      <button class="btn btn-ghost btn-sm" id="btn-sentinel-clear-mines">最初からやり直す</button>
+      <button class="btn btn-primary" id="btn-sentinel-ready" disabled>READY</button>
+    </div>
+  </section>
+
+  <!-- ============ SENTINEL MINES: HUNTER PLAY / GUARDIAN SPECTATE ============ -->
+  <section id="screen-sentinel-hunter" class="screen">
+    <div class="sentinel-role-banner" id="sentinel-h-role-banner">Hunterフェーズ</div>
+    <div class="hud" style="grid-template-columns:repeat(2,1fr);">
+      <div class="hud-item time" id="sentinel-h-time-box"><div class="v mono" id="sentinel-h-time">360</div><div class="l">TIME</div></div>
+      <div class="hud-item"><div class="v mono" id="sentinel-h-opened">0</div><div class="l">開放数</div></div>
+    </div>
+    <div class="sentinel-radar-banner" id="sentinel-radar-banner" style="display:none;"></div>
+    <div class="mode-banner" id="sentinel-guess-banner">GUESSモード（タイマー停止中）― 爆弾だと思うマスに旗を立てて確定しよう</div>
+
+    <div class="board-wrap"><div id="sentinel-hunter-board"></div></div>
+
+    <div class="sentinel-hint-panel" id="sentinel-hint-panel">
+      <div class="sentinel-hint-title">ヒントカード（1試合につき1回）</div>
+      <div class="sentinel-hint-grid">
+        <button class="sentinel-hint-btn" id="btn-hint-radar"><span class="t">📡 Radar Scan</span><br><span class="d">10秒間、3〜5マス(ランダム決定)まで自由に覗き見られる</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-border"><span class="t">🧭 Border Intel</span><br><span class="d">盤面外周にあるMine数を教えてもらう</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-safe"><span class="t">🟢 Safe Reveal</span><br><span class="d">安全なマスをランダムで4マス開放する</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-signal"><span class="t">📶 Signal Boost</span><br><span class="d">Core Mineから最も遠い安全マスを1マス開放する</span></button>
+      </div>
+    </div>
+
+    <div class="guess-actions" id="sentinel-guess-actions-normal">
+      <button class="btn btn-good" id="btn-sentinel-guess-enter">GUESS</button>
+    </div>
+    <div class="guess-actions" id="sentinel-guess-actions-mode" style="display:none;">
+      <button class="btn btn-danger" id="btn-sentinel-guess-confirm">GUESS 確定</button>
+    </div>
+
+    <div class="sentinel-spectate-note" id="sentinel-spectate-note" style="display:none;">👁️ 相手（Hunter）をリアルタイム観戦中です。スコアはゲーム終了まで分かりません。</div>
+  </section>
+
+  <!-- ============ SENTINEL MINES: ROUND REVEAL ============ -->
+  <section id="screen-sentinel-reveal" class="screen">
+    <div class="topbar"><h2 class="display" id="sentinel-reveal-title">Round 1 結果発表</h2></div>
+    <div class="sentinel-setup-status" id="sentinel-reveal-status">Hunterの盤面を公開しています…</div>
+    <div class="board-wrap"><div id="sentinel-reveal-board"></div></div>
+    <div class="btn-row" style="max-width:none; margin-top:auto;">
+      <button class="btn btn-primary" id="btn-sentinel-reveal-next" disabled>つぎへ</button>
+    </div>
+  </section>
+
+  <!-- ============ SENTINEL MINES: RESULT ============ -->
+  <section id="screen-sentinel-result" class="screen">
+    <div class="topbar"><h2 class="display">SENTINEL MINES 結果</h2></div>
+    <div class="dual-outcome" id="sentinel-outcome-banner">集計中…</div>
+
+    <div class="sentinel-round-title">Round 1</div>
+    <div class="sentinel-score-table" id="sentinel-round1-table"></div>
+
+    <div class="sentinel-round-title">Round 2</div>
+    <div class="sentinel-score-table" id="sentinel-round2-table"></div>
+
+    <div class="sentinel-total-row"><span id="sentinel-total-my-label">YOU</span><span class="mono" id="sentinel-total-my-score">0</span></div>
+    <div class="sentinel-total-row"><span id="sentinel-total-opp-label">OPPONENT</span><span class="mono" id="sentinel-total-opp-score">0</span></div>
+
+    <div class="btn-row" style="max-width:none; margin-top:auto;">
+      <button class="btn btn-primary" id="btn-sentinel-rematch">リマッチ</button>
+      <button class="btn btn-ghost" id="btn-sentinel-home-back">ホームへ戻る</button>
+    </div>
+  </section>
+
+  <!-- ============ RANKING ============ -->
+  <section id="screen-ranking" class="screen">
+    <div class="topbar">
+      <h2 class="display">RANKING</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-ranking-back">閉じる</button>
+    </div>
+    <div class="ranking-list" id="ranking-list"></div>
+  </section>
+
+  <!-- ============ RULEBOOK ============ -->
+  <section id="screen-rules" class="screen">
+    <div class="topbar">
+      <h2 class="display">ルールブック</h2>
+      <button class="btn btn-ghost btn-sm" id="btn-rules-back">閉じる</button>
+    </div>
+    <div class="rule-tabs">
+      <div class="rule-tab active" id="rule-tab-solo">🕵️ Solo Mines</div>
+      <div class="rule-tab" id="rule-tab-dual">⚔️ Dual Mines</div>
+      <div class="rule-tab" id="rule-tab-open">🔓 Open Mines</div>
+      <div class="rule-tab" id="rule-tab-sentinel">🛡️ SENTINEL MINES</div>
+    </div>
+    <div class="rules-scroll" id="rules-scroll-solo">
+      <div class="rule-card">
+        <h3>Solo Minesとは</h3>
+        <p>8×8の盤面に隠された5個の爆弾を、マスを開いたときに表示される「距離」の手がかりだけで見つけ出す、1人用の推理モードです。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>スコア計算</h3>
+        <ul>
+          <li>GUESS成功：<strong>+200点</strong> / マス</li>
+          <li>GUESS失敗：<strong>-150点</strong> / マス</li>
+          <li>爆弾を踏む：<strong>-100点</strong> / 個</li>
+          <li>未開放マス：<strong>+5点</strong> / マス（開かなかったマスにもボーナスがつく）</li>
+          <li>爆弾を1つも爆発させず、GUESSで5個すべてを言い当てると<strong>完全制覇ボーナス+777点</strong>。</li>
+          <li><strong>タイムボーナス</strong>：確定した時点の残り秒数の<strong>半分</strong>がスコアに加算される（0.5などの端数もそのまま加算・早くクリアするほど有利）。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>基本ルール</h3>
+        <ul>
+          <li>盤面は <strong>8×8</strong>、爆弾は <strong>5個</strong>。</li>
+          <li>爆弾は最初にクリックしたマスと同時に配置される。そのマスには爆弾が置かれず、そこからチェビシェフ距離3以上離れた位置にのみ生成される。</li>
+          <li>爆弾同士は縦・横・斜めを含む8方向に隣接しないように配置される。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>距離表示</h3>
+        <p>マスを開くと、そのマスから最も近い爆弾までの距離が数字で表示される。距離は<strong>チェビシェフ距離</strong>（縦・横・斜めをすべて1マスとして数える距離）。</p>
+        <p>表示は <strong>1〜4</strong>。4以上離れている場合はすべて「4」と表示される。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>距離4の自動開放</h3>
+        <p>距離「4」のマスを開くと、そのマスを中心とした<strong>半径2マス（5×5）</strong>の範囲内にある、まだ開いていない距離4のマスだけを自動で開く。</p>
+        <p>距離1〜3のマスや爆弾は自動では開かない。また、この自動開放は連鎖しない（自動で開いたマスからさらに自動開放が起きることはない）。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>爆弾を踏んだ場合</h3>
+        <ul>
+          <li>爆発演出とともに<strong>スコア-100</strong>。</li>
+          <li>その爆弾は「発見済み」となり、以後クリックできない。</li>
+          <li>GUESSできる最大数が1減る。</li>
+          <li>ゲームは続行するが、<strong>5個すべての爆弾を爆発</strong>させると即ゲームオーバーになる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>GUESSモード</h3>
+        <ul>
+          <li>GUESSボタンを押すとGUESSモードに入り、爆弾だと思うマスに旗を立てられる（自由に付け外し可能）。<strong>一度GUESSモードに入るとプレイには戻れない</strong>ので、開くマスを選ぶ段階でよく考えよう。</li>
+          <li>旗を立てられる数の上限は「<strong>5 − 爆発済み爆弾数</strong>」。</li>
+          <li>GUESSモード中は<strong>タイマーが停止</strong>する。じっくり考えてから確定してOK。</li>
+          <li>もう一度GUESSボタンを押すと確定。<strong>確定後は元に戻れない</strong>。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>タイマーとランキング</h3>
+        <p>制限時間は<strong>480秒（8分）</strong>。最初のマスをクリックした時点でスタートする。プレイ中に時間切れになると自動でGUESSモードに入り、その時点の旗の状態でそのまま確定する。</p>
+        <p>ランキングはスコアが高い順。同スコアの場合は残り時間が多い方が上位、それも同じなら同順位になる。</p>
+      </div>
+
+      <div class="rule-card tip-card">
+        <h3>攻略のコツ</h3>
+        <ul>
+          <li>距離「1」が出たマスの周囲は特に危険。複数マスの距離情報を突き合わせてから開こう。</li>
+          <li>距離「4」のマスは自動で周囲が開けやすいので、うまく使うと安全に情報を稼げる。</li>
+          <li>GUESSモードはタイマーが止まるので、確定を押す前に何度も見直そう。</li>
+          <li>すべて開き切らなくても未開放ボーナスがある。怪しいマスは無理に開けず、GUESSに賭けたほうが得なこともある。</li>
+          <li>完全制覇ボーナスを狙うなら、爆発を1回もしないことが絶対条件。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rules-scroll" id="rules-scroll-dual" style="display:none;">
+      <div class="rule-card">
+        <h3>Dual Minesとは</h3>
+        <p>2人のプレイヤーが<strong>まったく同じ盤面</strong>で同時にプレイし、スコアを競うオンライン対戦モードです。基本的なゲームルールはSolo Minesと同じですが、スコア計算は<strong>タイムボーナスを含まない</strong>点が異なります（勝敗は残り時間ではなくスコアで決まるため）。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>スコア計算</h3>
+        <ul>
+          <li>GUESS成功：<strong>+200点</strong> / マス</li>
+          <li>GUESS失敗：<strong>-150点</strong> / マス</li>
+          <li>爆弾を踏む：<strong>-100点</strong> / 個</li>
+          <li>未開放マス：<strong>+5点</strong> / マス（開かなかったマスにもボーナスがつく）</li>
+          <li>爆弾を1つも爆発させず、GUESSで5個すべてを言い当てると<strong>完全制覇ボーナス+777点</strong>。</li>
+          <li>Solo Minesと違い、<strong>タイムボーナスは無い</strong>（残り時間は勝敗判定にのみ使われる）。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>部屋を作る・参加する</h3>
+        <ul>
+          <li>1人が「部屋を作る」を押すと<strong>5桁のルームコード</strong>が発行される。</li>
+          <li>もう1人がそのコードを入力して「参加する」を押すとマッチ成立。</li>
+          <li>ランダムマッチングは無く、コードを知っている人同士だけで対戦する。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>盤面生成とスタート</h3>
+        <p>マッチ成立後、同一の盤面が生成され（論理的に一意確定できる盤面か検証したうえで）、両プレイヤーへ配布される。その後「3・2・1・START!」のカウントダウンが表示され、START!の表示と同時に<strong>480秒</strong>のタイマーが始まる。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>プレイ内容</h3>
+        <p>距離表示・自動開放・爆発・GUESS・スコア計算は<strong>ソロプレイと完全に同一のルール</strong>。ただし盤面は両プレイヤーで同じものを使う。相手の盤面や途中経過・途中スコアは表示されない。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>相手のGUESSと20秒ルール</h3>
+        <ul>
+          <li>どちらかがGUESSを確定した瞬間、相手に「相手がGUESSしました」という通知が表示され、同時に<strong>20秒カウントダウン</strong>が始まる。</li>
+          <li>この20秒間は通常通りプレイ可能（マスを開く・爆弾を踏むこともできる）。</li>
+          <li>20秒以内にGUESSしなければ、その時点の状態で<strong>自動的にGUESSが確定</strong>される。</li>
+          <li>20秒タイマー中も480秒タイマーは止まらない。480秒が先に終了した場合はそちらが優先され、その時点で強制的にGUESSが確定する。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>通信切断・勝敗判定</h3>
+        <ul>
+          <li>試合中に通信が切れた（一定時間応答が無くなった）プレイヤーは<strong>敗北</strong>となる。</li>
+          <li>勝敗は「①スコア → ②残り時間」の順で判定。完全に一致した場合は<strong>引き分け</strong>。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card tip-card">
+        <h3>試合後</h3>
+        <ul>
+          <li>試合終了画面では、勝敗・自分のスコア・相手のスコア・スコア内訳が表示される。</li>
+          <li>両プレイヤーが「リマッチ」を押すと、新しい盤面で同じ部屋のまま再戦できる。</li>
+          <li>「ホームへ戻る」でいつでも退出できる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Solo Minesとの違い（このモード特有の設定）</h3>
+        <ul>
+          <li>盤面・距離表示・<strong>自動開放（距離4以上のマスで発動）</strong>はSolo Minesと完全に同じ。</li>
+          <li><strong>タイムボーナスが無い</strong>（残り時間はスコアには加算されず、勝敗判定にのみ使われる）。</li>
+          <li>相手がGUESSを確定すると、そこから<strong>20秒の猶予</strong>後に自動的にこちらもGUESSが確定する。</li>
+          <li>通信が切れた場合、相手の勝ちになる（Solo Minesには無い概念）。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rules-scroll" id="rules-scroll-open" style="display:none;">
+      <div class="rule-card">
+        <h3>Open Minesとは</h3>
+        <p>2人が<strong>1つの盤面を完全に共有</strong>しながら交互にマスを開ける対戦モードです。「あと1マス開けたい、でもその情報は相手にも渡ってしまう」という読み合いが最大の魅力です。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>スコア計算</h3>
+        <ul>
+          <li>GUESS成功：<strong>+200点</strong> / GUESS失敗：<strong>-150点</strong> / 爆弾を踏む：<strong>-100点</strong>。</li>
+          <li>盤面を共有するため、未開放マスによるボーナスは無い。タイムボーナス・完全制覇ボーナスも無い。</li>
+          <li>スコアが高い方の勝ち。同点なら引き分け。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>マッチングと盤面生成</h3>
+        <p>部屋の作成・参加はDual Minesと同じ（5桁のルームコード）。マッチ成立後、論理的に一意確定できるか検証した盤面が生成され、両プレイヤーへ配布される。「3・2・1・START!」の合図で試合開始。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>ターン制</h3>
+        <ul>
+          <li>先攻・後攻はランダムに決まる。</li>
+          <li>各プレイヤーには<strong>持ち時間180秒</strong>があり、自分のターン中だけ減っていく（相手のターン中は減らない）。</li>
+          <li>自分のターンでは「①未開放マスを1つ開く」か「②GUESSを宣言する」のどちらかを選ぶ。マスを開いたらターン終了、相手に手番が移る。</li>
+          <li>片方が開いたマスはもう片方にも即座に反映される（盤面は完全共有）。距離表示・自動開放・爆発などの基本ルールはSolo Minesと同じ。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>GUESSフェーズ</h3>
+        <ul>
+          <li>自分のターンでGUESSを宣言した瞬間、試合はGUESSフェーズへ移行する。</li>
+          <li>GUESSフェーズでは両プレイヤーが同時に（お互い見えない状態で）旗を配置する。</li>
+          <li>旗の設置には<strong>30秒の制限時間</strong>があり、超えると自動でその時点の状態のまま確定する。</li>
+          <li>GUESSフェーズ中は持ち時間(180秒)は両者とも停止する。</li>
+          <li>両者が確定すると答え合わせが行われる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>持ち時間切れ</h3>
+        <p>自分のターン中に持ち時間180秒を使い切ると、強制的にGUESSフェーズへ移行する。</p>
+      </div>
+
+      <div class="rule-card tip-card">
+        <h3>試合後</h3>
+        <ul>
+          <li>試合終了画面では、勝敗・自分のスコア・相手のスコア・スコア内訳が表示される。</li>
+          <li>両プレイヤーが「リマッチ」を押すと、新しい盤面で先攻後攻を決め直して再戦できる。</li>
+          <li>「ホームへ戻る」でいつでも退出できる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Solo Minesとの違い（このモード特有の設定）</h3>
+        <ul>
+          <li>距離表示・<strong>自動開放（距離4以上のマスで発動）</strong>の基本ルールはSolo Minesと同じ。</li>
+          <li>盤面を2人で<strong>完全共有</strong>し、交互にターンを行う点がSolo Minesと異なる。</li>
+          <li><strong>未開放マスボーナス・タイムボーナス・完全制覇ボーナスは無い</strong>（盤面を共有するため）。</li>
+          <li>Solo Minesの480秒タイマーの代わりに、<strong>持ち時間180秒（自分のターンのみ消費）</strong>と<strong>GUESSフェーズ30秒</strong>という独自の時間制約がある。</li>
+          <li>通信が切れた場合、相手の勝ちになる（Solo Minesには無い概念）。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rules-scroll" id="rules-scroll-sentinel" style="display:none;">
+      <div class="rule-card">
+        <h3>SENTINEL MINESとは</h3>
+        <p>盤面に地雷を仕込む<strong>Guardian</strong>と、それを暴く<strong>Hunter</strong>に分かれる非対称の2ラウンド制対戦です。2ラウンドで役割を交代し、合計スコアが高い方が勝ち。情報戦・心理戦・ブラフが中心のモードです。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>Mineの価値の決定方法</h3>
+        <p>Guardianは通常Mineを1〜5個配置できます。<strong>配置したMineの総数によって、すべてのMineの価値が決まり</strong>、この価値がゲーム中すべてのスコア計算で共通して使われます。</p>
+        <ul>
+          <li>1個配置：1個あたり<strong>1000点</strong></li>
+          <li>2個配置：1個あたり<strong>500点</strong></li>
+          <li>3個配置：1個あたり<strong>333点</strong></li>
+          <li>4個配置：1個あたり<strong>250点</strong></li>
+          <li>5個配置：1個あたり<strong>200点</strong></li>
+        </ul>
+        <p>Core Mineは配置数に関係なく<strong>600点固定</strong>。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>その他のスコア（開放マス）</h3>
+        <ul>
+          <li>Hunterが最後まで開けなかったマス：Hunter <strong>+5点</strong>／1マス</li>
+          <li>Hunterが開けたマス：Guardian <strong>+5点</strong>／1マス</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>フルオープンボーナス</h3>
+        <p>Hunterが一度も爆発させず、<strong>Core Mine・Mineすべてを正しくGUESS</strong>できた場合：Hunter <strong>+777点</strong>。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>時間ボーナス</h3>
+        <ul>
+          <li>Hunter：残り時間をそのまま加算（例：残り300秒 → +300点）</li>
+          <li>Guardian：経過時間（360−Hunter残り時間）をそのまま加算（例：Hunter残り300秒 → Guardian +60点）</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Guardian側のスコア計算（すべて加算式）</h3>
+        <ul>
+          <li>① Core Mineを守り切る：HunterがGUESSできなかった場合 <strong>+600点</strong></li>
+          <li>② Mineを守り切る：HunterがGUESSできなかったMineについて、そのMineの価値をそのまま獲得（例：Mine2個配置→1個だけ発見された→残り1個分 +500点）</li>
+          <li>③ HunterがMineを踏む：踏まれたMineの価値の<strong>50%</strong>を獲得（1000→+500 / 500→+250 / 333→+166 / 250→+125 / 200→+100）</li>
+          <li>④ HunterがCore Mineを踏む：Core Mine価値600点の50% <strong>+300点</strong></li>
+          <li>⑤ Hunterが開けたマス：<strong>+5点</strong>／1マス</li>
+          <li>⑥ 時間ボーナス：経過時間（360−Hunter残り時間）をそのまま加算</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Hunter側のスコア計算（すべて加算式）</h3>
+        <ul>
+          <li>① Core MineをGUESS成功：2×2の4マスのうち1マスでも的中すれば成功 <strong>+600点</strong></li>
+          <li>② MineをGUESS成功：発見したMineの価値をそのまま獲得（1000 / 500 / 333 / 250 / 200点）</li>
+          <li>③ Mineを踏む：踏んだMineの価値の<strong>50%</strong>を減点（1000→-500 / 500→-250 / 333→-166 / 250→-125 / 200→-100）</li>
+          <li>④ Core Mineを踏む：Core Mine価値600点の50% <strong>-300点</strong></li>
+          <li>⑤ 未開放マス：<strong>+5点</strong>／1マス</li>
+          <li>⑥ フルオープンボーナス：一度も爆発させずCore Mine・Mineすべてを正しくGUESSできた場合 <strong>+777点</strong></li>
+          <li>⑦ 時間ボーナス：残り時間をそのまま加算</li>
+        </ul>
+      </div>
+
+      <div class="rule-card tip-card">
+        <h3>スコア設計コンセプト</h3>
+        <p>このモードは単純なスピード勝負ではなく、<strong>Core Mineを守る／見つける</strong>、<strong>Mineの配置数をどうするか考える</strong>、<strong>相手にミスを誘発する</strong>、<strong>少ない情報で推理する</strong>ことを重視したゲームデザインです。</p>
+        <p>Mineの価値は「配置数」で変化するため、Guardianは配置数自体を戦略として選択でき、Hunterは「踏まない」「少ない情報で見抜く」ことにも高い価値が生まれます。</p>
+      </div>
+
+      <div class="rule-card">
+        <h3>盤面とラウンド進行</h3>
+        <ul>
+          <li>盤面は<strong>8×8</strong>。距離表示のルールはSolo Minesと同じチェビシェフ距離だが、数字の上限は<strong>1〜6</strong>（6以上はすべて「6」）。</li>
+          <li>距離「5」以上のマスを開くと、周囲5×5の未開放の距離5以上マスが自動で開く（連鎖はしない）。Solo Minesの自動開放（距離4以上）より1段階広い。</li>
+          <li>Round1: Player A(部屋を作った人)がGuardian、Player Bがhunter。Round2はGuardian/Hunterが入れ替わる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Guardianフェーズ（制限時間60秒）</h3>
+        <ul>
+          <li>まず<strong>Core Mine（2×2固定）</strong>を1つ配置する。盤面内に完全に収まる位置にのみ置ける。</li>
+          <li>続けて通常の<strong>Mine</strong>を1〜5個、好きな数だけ配置する（距離の制約は無く、隣接していてもよい。Core Mineや他のMineと重ならなければOK）。</li>
+          <li>Core Mineを置き、Mineを最低1個置くとREADYできる。60秒経過時は自動でREADYになる。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Hunterフェーズ（制限時間360秒）</h3>
+        <ul>
+          <li>距離のヒントを頼りにマスを開いていく。開いたマス・爆発・GUESSの様子はすべて<strong>Guardianにリアルタイムで見られている</strong>（ただしスコアはゲーム終了まで非公開）。</li>
+          <li>GUESSの流れはSolo Minesと同じ：GUESSボタン→旗設置→GUESSボタン→答え合わせ。</li>
+          <li>GUESSできる数は最大<strong>6個</strong>。Core Mine・Mineどちらに使うかは自由（例：Core1個+Mine5個、Core4マス全部+Mine2個、など）。Core Mineは2×2のうち1マスでも旗を立てれば成功になる。</li>
+          <li>時間切れになると、その時点の旗の状態で自動的にGUESSが確定する。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>ヒントカード（Hunter専用・1試合1回）</h3>
+        <ul>
+          <li><strong>📡 Radar Scan</strong>：使用すると3〜5マス（ランダムで決定）まで自由にマスを覗ける10秒間のモードに入る。安全マスは10秒経過後すべて未開放に戻る（純粋な偵察用）。ただし爆弾を踏んだ場合は通常通り確定でカウントされる。</li>
+          <li><strong>🧭 Border Intel</strong>：盤面の一番外側の行・列にあるMineの数を教えてもらう（Core Mineも外周に触れていれば1個としてカウント）。</li>
+          <li><strong>🟢 Safe Reveal</strong>：安全なマスをランダムで4マス、そのまま通常開放する（永続的）。</li>
+          <li><strong>📶 Signal Boost</strong>：Core Mineから最も遠い、まだ開いていない安全マスを1マス、そのまま通常開放する（複数該当する場合はランダムで1つ）。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card tip-card">
+        <h3>ラウンド進行・試合後</h3>
+        <ul>
+          <li>Hunterフェーズ終了後、Hunterの盤面・Mine・Core Mine・GUESSの正誤が公開される（この時点ではスコアは表示されない）。</li>
+          <li>Round1終了後は役割交代してRound2へ。Round2終了後、両ラウンドのスコア内訳・合計スコア・勝敗がすべて公開される。</li>
+          <li>両プレイヤーが「リマッチ」を押すと、新しい盤面で再戦できる（役割は再度Round1から）。</li>
+        </ul>
+      </div>
+
+      <div class="rule-card">
+        <h3>Solo Minesとの違い（このモード特有の設定）</h3>
+        <ul>
+          <li>盤面は8×8で同じだが、距離の<strong>上限が4ではなく6</strong>（表示は1〜6）。</li>
+          <li><strong>自動開放の発動条件が距離4以上ではなく距離5以上</strong>（Solo Minesより1段階広い）。</li>
+          <li>Mineの配置はSolo Minesのようなランダム生成ではなく、<strong>Guardianが手動で行う</strong>。</li>
+          <li>スコア計算は全く別物：Mine/Core Mineの<strong>発見・守り・踏み・時間経過</strong>それぞれに専用の計算式があり、Guardian/Hunterで内容が異なる（詳細は上の「スコア計算」参照）。</li>
+          <li><strong>ヒントカード</strong>というSolo Minesには無い専用要素がある（Hunterのみ、1試合1回）。</li>
+          <li>GUESSできる最大数は<strong>6個</strong>（Solo Minesは5個）。Core Mine・Mineどちらに使うかは自由。</li>
+          <li>通信が切れた場合、相手の勝ちになる（Solo Minesには無い概念）。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   ① ランキング用設定：Google スプレッドシート(Apps Script Web App)
+   README.md の手順でApps Scriptを発行し、そのURLをここに貼り付けてください。
+   ========================================================================= */
+const SHEETS_WEBAPP_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL";
+
+function sheetsConfigured(){
+  return !!SHEETS_WEBAPP_URL && SHEETS_WEBAPP_URL.indexOf('YOUR_') !== 0;
+}
+
+/* =========================================================================
+   ② 対戦用設定：SkyWay（P2P通信）
+   README.md の手順でSkyWayのアプリを作成し、App ID / シークレットキーを
+   ここに貼り付けてください。
+   ⚠️ このやり方はシークレットキーがブラウザから丸見えになる簡易版です。
+   個人・友人間で遊ぶ用途に限定してください（README.md参照）。
+   ========================================================================= */
+const SKYWAY_APP_ID = "YOUR_SKYWAY_APP_ID";
+const SKYWAY_SECRET_KEY = "YOUR_SKYWAY_SECRET_KEY";
+
+function skywayConfigured(){
+  return !!(window.skyway_room && window.skyway_token &&
+    SKYWAY_APP_ID && SKYWAY_APP_ID.indexOf('YOUR_') !== 0 &&
+    SKYWAY_SECRET_KEY && SKYWAY_SECRET_KEY.indexOf('YOUR_') !== 0);
+}
+
+/* SkyWay Auth Tokenをブラウザ内で発行する（本来はサーバー側で行うのが安全）。
+   何でもできる(read/write全許可)ゆるいトークンを24時間有効で発行する。 */
+function createSkyWayAuthToken(){
+  const { SkyWayAuthToken, uuidV4, nowInSec } = window.skyway_token;
+  return new SkyWayAuthToken({
+    jti: uuidV4(),
+    iat: nowInSec(),
+    exp: nowInSec() + 60 * 60 * 24,
+    scope: {
+      app: {
+        id: SKYWAY_APP_ID,
+        turn: true,
+        actions: ['read'],
+        channels: [{
+          id: '*', name: '*', actions: ['write'],
+          members: [{
+            id: '*', name: '*', actions: ['write'],
+            publication: { actions: ['write'] },
+            subscription: { actions: ['write'] }
+          }]
+        }]
+      }
+    }
+  }).encode(SKYWAY_SECRET_KEY);
+}
+
+/* =========================================================================
+   SkyWay 接続レイヤー（Dual Mines / Open Mines 共通）
+   1つの「部屋(Room)」に host/guest の2人だけが入る、シンプルなP2P通信。
+   ポーリングや生存確認は不要（SkyWayが切断をリアルタイムに教えてくれる）。
+   ========================================================================= */
+let sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
+
+/* roomName の部屋に myName(=' host' か 'guest') として入室する。
+   mode: 'create'（部屋を新規作成/上書き取得）or 'find'（既存の部屋を探す。無ければ失敗) */
+async function skywayJoinRoom(roomName, myName, mode, handlers){
+  const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = window.skyway_room;
+  const token = createSkyWayAuthToken();
+  const context = await SkyWayContext.Create(token);
+
+  let room;
+  if (mode === 'create'){
+    room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
+  } else {
+    room = await SkyWayRoom.Find(context, { name: roomName });
+    if (!room) throw new Error('ROOM_NOT_FOUND');
+  }
+
+  sw.room = room;
+  sw.onMessage = handlers.onMessage || null;
+  sw.onPeerLeft = handlers.onPeerLeft || null;
+  sw.onPeerJoined = handlers.onPeerJoined || null;
+
+  const me = await room.join({ name: myName });
+  sw.me = me;
+  sw.localStream = await SkyWayStreamFactory.createDataStream();
+  await me.publish(sw.localStream);
+
+  const subscribeIfNeeded = async (publication)=>{
+    if (!publication || publication.publisher.id === me.id) return;
+    if (publication.contentType !== 'data') return;
+    const { stream } = await me.subscribe(publication.id);
+    stream.onData.add((data)=>{
+      if (!sw.onMessage) return;
+      try{ sw.onMessage(JSON.parse(data)); }catch(e){ console.error('SkyWayメッセージ解析エラー:', e); }
+    });
+  };
+
+  for (const pub of room.publications){ await subscribeIfNeeded(pub); }
+  room.onStreamPublished.add((e)=> subscribeIfNeeded(e.publication));
+  room.onMemberJoined.add((e)=>{
+    if (e.member.id !== me.id && sw.onPeerJoined) sw.onPeerJoined(e.member);
+  });
+  room.onMemberLeft.add((e)=>{
+    if (e.member.id !== me.id && sw.onPeerLeft) sw.onPeerLeft();
+  });
+
+  return me;
+}
+
+function skywaySend(payload){
+  if (sw.localStream){
+    try{ sw.localStream.write(JSON.stringify(payload)); }catch(e){ console.error('SkyWay送信エラー:', e); }
+  }
+}
+
+async function skywayLeaveRoom(){
+  try{ if (sw.me) await sw.me.leave(); }catch(e){ /* 無視 */ }
+  sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
+}
+
+/* =========================================================================
+   設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
+   ========================================================================= */
+const DIFFICULTIES = {
+  normal: { key:'normal', label:'ノーマル', rows:8, cols:8, bombs:5, timeLimit:480, minStartDistance:3, distanceCap:4 }
+};
+const CURRENT_DIFFICULTY = DIFFICULTIES.normal;
+
+/* 「賭けなし生成（論理的に一意確定可能な盤面）」の検証にかける予算。
+   ブラウザを固まらせないよう、時間・探索ノード数の両方に上限を設ける。
+   上限に達した場合は検証をあきらめ、通常のランダム生成盤面にフォールバックする。 */
+const GEN_ATTEMPT_LIMIT = 20;        // 盤面の生成トライ回数の上限
+const GEN_TOTAL_BUDGET_MS = 1600;    // 生成全体にかける時間予算(ms)
+const PER_BOARD_VERIFY_MS = 500;     // 1つの候補盤面の検証にかける時間予算(ms)
+const NODE_BUDGET_PER_CHECK = 15000; // 1回の充足可能性チェックの探索ノード数上限
+
+/* =========================================================================
+   Dual Mines（オンライン対戦）関連の設定
+   SkyWayのP2P接続を使うため、ポーリングや生存確認のタイマーは不要。
+   ========================================================================= */
+const DUAL_FIRST_CELL = { r: 3, c: 3 };     // Dual Minesで共通して使う初手セル(固定)
+const DUAL_GUESS_GRACE_MS = 20000;          // 相手GUESS確定後の猶予時間
+const DUAL_COUNTDOWN_SECONDS = 3;           // マッチ開始前のカウントダウン秒数
+
+/* =========================================================================
+   Open Mines（盤面共有・交互ターン対戦）関連の設定
+   ========================================================================= */
+const OPEN_FIRST_CELL = { r: 3, c: 3 };      // 共有盤面の初手セル(固定・自動オープン)
+const OPEN_TIME_BANK_SECONDS = 180;          // 各プレイヤーの持ち時間(秒)
+const OPEN_GUESS_PHASE_MS = 30000;           // GUESSフェーズ(旗設置)の制限時間
+const OPEN_COUNTDOWN_SECONDS = 3;            // マッチ開始前のカウントダウン秒数
+
+/* =========================================================================
+   SENTINEL MINES（非対称2ラウンド対戦）関連の設定
+   ========================================================================= */
+const SENTINEL_ROWS = 8, SENTINEL_COLS = 8;
+const SENTINEL_DISTANCE_CAP = 6;
+const SENTINEL_AUTO_REVEAL_DIST = 5;  // この距離以上のマスを開くと周囲5×5の同距離マスが自動開放される
+const SENTINEL_MAX_MINES = 5;
+const SENTINEL_GUARDIAN_TIME = 60;
+const SENTINEL_HUNTER_TIME = 360;
+const SENTINEL_MAX_GUESS = 6;
+const SENTINEL_MINE_POINTS = { 1:1000, 2:500, 3:333, 4:250, 5:200 };
+const SENTINEL_CORE_POINTS = 600;
+const SENTINEL_OPEN_BONUS = 5;
+const SENTINEL_FULL_OPEN_BONUS = 777;
+const SENTINEL_RADAR_SCAN_MS = 10000;
+const SENTINEL_COUNTDOWN_SECONDS = 3;
+function sentinelRoomNameFromCode(code){ return 'radarmines-sentinel-' + code; }
+
+/* =========================================================================
+   ランキング（スプレッドシート）
+   ========================================================================= */
+const TOP_RANKING_DISPLAY = 30;  // ランキング画面に表示する「TOP」の件数
+const RECENT_DISPLAY = 15;       // ランキング画面に表示する「直近の挑戦者」の件数
+let memoryLeaderboardFallback = []; // スプレッドシート未設定/通信失敗時の一時保存先
+
+async function loadLeaderboard(){
+  if (!sheetsConfigured()) return memoryLeaderboardFallback.slice();
+  try{
+    const res = await fetch(SHEETS_WEBAPP_URL, { method:'GET' });
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+  }catch(e){ console.error('loadLeaderboard error:', e); }
+  return memoryLeaderboardFallback.slice();
+}
+
+async function submitScore(entry){
+  memoryLeaderboardFallback.push(entry);
+  if (!sheetsConfigured()) return false;
+  try{
+    // Content-Typeをtext/plainにすることでブラウザのプリフライトリクエストを回避する
+    // (Apps ScriptはCORSプリフライトのOPTIONSに対応していないため)
+    await fetch(SHEETS_WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(entry)
+    });
+    return true;
+  }catch(e){ console.error('submitScore error:', e); return false; }
+}
+
+function sortLeaderboard(list){
+  return list.slice().sort((a,b)=>{
+    if (b.score !== a.score) return b.score - a.score;
+    return b.timeLeft - a.timeLeft;
+  });
+}
+
+function sortByRecent(list){
+  return list.slice().sort((a,b)=> new Date(b.playedAt) - new Date(a.playedAt));
+}
+
+/* 同率順位（1224方式）を割り当てる */
+function assignRanks(sortedList){
+  let rank = 0, prevScore = null, prevTime = null;
+  return sortedList.map((entry, idx)=>{
+    if (entry.score !== prevScore || entry.timeLeft !== prevTime){
+      rank = idx + 1;
+      prevScore = entry.score; prevTime = entry.timeLeft;
+    }
+    return Object.assign({}, entry, { rank });
+  });
+}
+
+/* プレイヤー名の記憶（個人用・この端末のブラウザ内だけに保存すればよいのでlocalStorageを使用） */
+async function loadSavedName(){
+  try{
+    return localStorage.getItem('radarmines:playerName') || '';
+  }catch(e){ return ''; }
+}
+async function savePlayerName(name){
+  try{
+    localStorage.setItem('radarmines:playerName', name);
+  }catch(e){}
+}
+
+function generateDualRoomCode(){
+  const n = Math.floor(Math.random()*100000);
+  return String(n).padStart(5, '0');
+}
+function dualRoomNameFromCode(code){ return 'radarmines-duel-' + code; }
+function openRoomNameFromCode(code){ return 'radarmines-open-' + code; }
+
+
+/* =========================================================================
+   ゲーム状態
+   ========================================================================= */
+const state = {
+  phase: 'home', // home | playing | guessing | result
+  rows: 0, cols: 0, bombCount: 0,
+  board: [], // [r][c] = {isBomb,dist,opened,flagged,exploded}
+  boardGenerated:false,
+  score: 0,
+  explosionCount: 0,
+  timeLeft: 0,
+  timerId: null,
+  flagCount: 0,
+  guessSuccess: 0,
+  guessFail: 0,
+  finished:false,
+  playerName: 'PLAYER',
+  revealOrder: null,      // Map<"r,c", index> 答え合わせの演出順
+  revealDelayStep: 90,    // ms
+  revealAnimDuration: 480, // ms（CSSのrevealPopと合わせる）
+  generating: false,             // 盤面生成・検証中フラグ
+  boardWasVerifiedGuessFree: false, // 生成された盤面が「論理的に一意確定可能」と検証できたか
+
+  mode: 'solo', // 'solo' | 'dual' | 'open'
+  dual: {
+    code: null,
+    role: null,           // 'host' | 'guest'
+    myName: '',
+    opponentName: '',
+    opponentGuessDeadline: null, // epoch ms（相手GUESS確定からの20秒締切）
+    opponentGuessTickId: null,
+    opponentGuessHandled: false,
+    resultSubmitted: false,
+    opponentResult: null,
+    opponentDisconnected: false,
+    rematchReady: false,
+    opponentRematchReady: false
+  },
+  open: {
+    code: null,
+    role: null,             // 'host' | 'guest'
+    myName: '',
+    opponentName: '',
+    turnTickId: null,
+    guessTickId: null,
+    currentTurn: null,      // 'host' | 'guest'
+    turnStartedAtMs: null,
+    myTimeBank: OPEN_TIME_BANK_SECONDS,
+    oppTimeBank: OPEN_TIME_BANK_SECONDS,
+    myExplosions: 0,
+    myGuessConfirmed: false,
+    guessDeadlineMs: null,
+    myResult: null,
+    opponentResult: null,     // {score, guessSuccess, guessFail, explosions}
+    opponentDisconnected: false,
+    finishedAllExploded: false,
+    rematchReady: false,
+    opponentRematchReady: false
+  },
+  sentinel: {
+    code: null,
+    role: null,            // 'host'(PlayerA) | 'guest'(PlayerB)
+    myName: '',
+    opponentName: '',
+    round: 1,               // 1 | 2
+    myRoleThisRound: null,  // 'guardian' | 'hunter'
+    board: [],              // [r][c] = {isCore,isMine,dist,opened,exploded,flagged}
+    rows: SENTINEL_ROWS, cols: SENTINEL_COLS,
+    // --- Guardian設置用 ---
+    corePreview: null,      // {r,c} 左上プレビュー座標
+    coreCells: [],          // 確定したCore Mineの4マス
+    mineCells: [],          // 確定した通常Mineのマス
+    guardianTimerId: null,
+    guardianTimeLeft: SENTINEL_GUARDIAN_TIME,
+    guardianReady: false,
+    // --- Hunterプレイ用 ---
+    phase: 'idle',          // 'guardian_setup' | 'hunter_playing' | 'guessing' | 'reveal' | 'result'
+    hunterTimeLeft: SENTINEL_HUNTER_TIME,
+    hunterTimerId: null,
+    openedCount: 0,
+    explodedCells: [],      // このラウンド中に踏んだマス [{r,c,isCore}]
+    hintUsed: false,
+    hintPanelDisabled: false,
+    radarScanActive: false,
+    radarScanLimit: 0,
+    radarScanOpened: 0,
+    radarScanPeekedCells: [],  // 覗いた安全マス(時間切れで戻す)
+    radarScanTimerId: null,
+    radarScanTimeLeft: 0,
+    flagCount: 0,
+    guessSuccessCells: [],  // 答え合わせ用
+    // --- ラウンド結果 ---
+    myResult: null,          // このラウンドの自分の結果
+    opponentRoundData: null, // 相手から届いたラウンド最終盤面(観戦していた場合)
+    roundResults: [],        // [{round, guardianRole:'A'|'B', guardianScore, guardianBreakdown, hunterScore, hunterBreakdown}]
+    pendingReveal: null,
+    opponentResult: null,
+    opponentDisconnected: false,
+    rematchReady: false,
+    opponentRematchReady: false
+  }
+};
+
+function chebyshev(r1,c1,r2,c2){ return Math.max(Math.abs(r1-r2), Math.abs(c1-c2)); }
+
+function forEachCell(cb){
+  for(let r=0;r<state.rows;r++) for(let c=0;c<state.cols;c++) cb(r,c,state.board[r][c]);
+}
+
+function inBounds(r,c){ return r>=0 && r<state.rows && c>=0 && c<state.cols; }
+
+/* =========================================================================
+   盤面生成（初回クリック時に爆弾を配置）
+   ========================================================================= */
+function initEmptyBoard(){
+  const d = CURRENT_DIFFICULTY;
+  state.rows = d.rows; state.cols = d.cols; state.bombCount = d.bombs;
+  state.board = [];
+  for(let r=0;r<d.rows;r++){
+    const row = [];
+    for(let c=0;c<d.cols;c++){
+      row.push({ isBomb:false, dist:null, opened:false, flagged:false, exploded:false });
+    }
+    state.board.push(row);
+  }
+  state.boardGenerated = false;
+}
+
+/* 初回クリック地点を基準に、爆弾候補配置を1つランダムに作る（間隔制約を満たさなければnull） */
+function placeBombsRandom(firstR, firstC){
+  const d = CURRENT_DIFFICULTY;
+  const candidates = [];
+  forEachCell((r,c)=>{
+    if (r===firstR && c===firstC) return;
+    if (chebyshev(r,c,firstR,firstC) >= d.minStartDistance) candidates.push([r,c]);
+  });
+  const pool = candidates.slice();
+  shuffle(pool);
+  const bombs = [];
+  for (const [r,c] of pool){
+    if (bombs.length >= d.bombs) break;
+    const ok = bombs.every(([br,bc]) => chebyshev(r,c,br,bc) >= 2);
+    if (ok) bombs.push([r,c]);
+  }
+  return bombs.length === d.bombs ? bombs : null;
+}
+
+/* 極めて稀にplaceBombsRandomが繰り返し失敗した場合の保険（1個だけ間隔制約を緩める） */
+function placeBombsRelaxed(firstR, firstC){
+  const d = CURRENT_DIFFICULTY;
+  const candidates = [];
+  forEachCell((r,c)=>{
+    if (r===firstR && c===firstC) return;
+    if (chebyshev(r,c,firstR,firstC) >= d.minStartDistance) candidates.push([r,c]);
+  });
+  let placed = null;
+  for (let attempt=0; attempt<800 && !placed; attempt++){
+    const pool = candidates.slice();
+    shuffle(pool);
+    const bombs = [];
+    for (const [r,c] of pool){
+      if (bombs.length >= d.bombs) break;
+      const ok = bombs.every(([br,bc]) => chebyshev(r,c,br,bc) >= 2);
+      if (ok) bombs.push([r,c]);
+    }
+    if (bombs.length >= d.bombs - 1) placed = bombs;
+  }
+  return placed;
+}
+
+function applyBombs(bombs){
+  forEachCell((r,c,cell)=>{ cell.isBomb = false; });
+  bombs.forEach(([r,c])=>{ state.board[r][c].isBomb = true; });
+  computeDistances();
+}
+
+/* 盤面生成のメイン処理：ランダム配置を作っては「賭けなしで解けるか」を検証し、
+   解ける盤面が見つかるまで（時間予算の範囲内で）作り直す。 */
+function generateVerifiedBoard(firstR, firstC){
+  const overallStart = Date.now();
+  let fallbackBombs = null;
+  let chosenBombs = null;
+  let verified = false;
+
+  for (let attempt=0; attempt<GEN_ATTEMPT_LIMIT; attempt++){
+    if (Date.now() - overallStart > GEN_TOTAL_BUDGET_MS) break;
+
+    let bombs = null;
+    for (let tries=0; tries<50 && !bombs; tries++){ bombs = placeBombsRandom(firstR, firstC); }
+    if (!bombs) continue;
+    if (!fallbackBombs) fallbackBombs = bombs;
+
+    applyBombs(bombs);
+    if (isBoardGuessFree(firstR, firstC)){
+      chosenBombs = bombs;
+      verified = true;
+      break;
+    }
+  }
+
+  if (!verified){
+    chosenBombs = fallbackBombs || placeBombsRelaxed(firstR, firstC);
+  }
+  applyBombs(chosenBombs);
+  state.boardWasVerifiedGuessFree = verified;
+}
+
+function computeDistances(){
+  const d = CURRENT_DIFFICULTY;
+  const bombs = [];
+  forEachCell((r,c,cell)=>{ if (cell.isBomb) bombs.push([r,c]); });
+  forEachCell((r,c,cell)=>{
+    if (cell.isBomb){ cell.dist = 0; return; }
+    let min = Infinity;
+    for (const [br,bc] of bombs){
+      const dist = chebyshev(r,c,br,bc);
+      if (dist < min) min = dist;
+    }
+    cell.dist = Math.min(min, d.distanceCap);
+  });
+}
+
+function shuffle(arr){
+  for (let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+}
+
+/* =========================================================================
+   論理ソルバー：「盤面のすべての安全マスを、爆弾を踏むことなく
+   論理的な推理だけで開き切れるか（＝最後まで賭けが発生しないか）」を判定する。
+
+   考え方：
+   1. 開いたマスの距離表示から「そのマスを中心とした一定半径内には爆弾が無い」
+      （除外範囲）と「一定距離のリング上に爆弾が少なくとも1つある」という
+      制約が得られる。
+   2. 「もしこのマスが爆弾だと仮定したら、既知の制約と矛盾して
+      配置不可能になる」→ そのマスは安全だと証明できる。
+   3. 証明できた安全マスを開いて情報を増やし、これを繰り返す。
+   4. 最終的に全ての安全マスを開き切れれば「賭けなしで解ける盤面」。
+      途中で1マスも証明できなくなったら「賭けが必要な盤面」。
+   ========================================================================= */
+function idxOf(r,c){ return r*state.cols + c; }
+function rcOf(idx){ return [Math.floor(idx/state.cols), idx % state.cols]; }
+
+function ballIndices(r,c,radius){
+  const out = [];
+  if (radius < 0) return out;
+  for (let dr=-radius; dr<=radius; dr++){
+    const rr = r+dr;
+    if (rr<0 || rr>=state.rows) continue;
+    for (let dc=-radius; dc<=radius; dc++){
+      const cc = c+dc;
+      if (cc<0 || cc>=state.cols) continue;
+      out.push(idxOf(rr,cc));
+    }
+  }
+  return out;
+}
+
+function ringIndices(r,c,dist){
+  if (dist === 0) return [idxOf(r,c)];
+  const out = [];
+  for (let dr=-dist; dr<=dist; dr++){
+    const rr = r+dr;
+    if (rr<0 || rr>=state.rows) continue;
+    for (let dc=-dist; dc<=dist; dc++){
+      if (Math.max(Math.abs(dr),Math.abs(dc)) !== dist) continue;
+      const cc = c+dc;
+      if (cc<0 || cc>=state.cols) continue;
+      out.push(idxOf(rr,cc));
+    }
+  }
+  return out;
+}
+
+/* 現在わかっている距離情報から「爆弾が絶対に無い範囲」と
+   「爆弾が少なくとも1つ必要なリング」を組み立てる */
+function buildConstraints(openedInfo){
+  const cap = CURRENT_DIFFICULTY.distanceCap;
+  const excluded = new Set();
+  const ringReqs = [];
+  openedInfo.forEach((dist, idx)=>{
+    const [r,c] = rcOf(idx);
+    const ballRadius = (dist < cap) ? dist - 1 : cap - 1;
+    ballIndices(r,c,ballRadius).forEach(i => excluded.add(i));
+    if (dist < cap){
+      ringReqs.push(ringIndices(r,c,dist));
+    }
+  });
+  return { excluded, ringReqs };
+}
+
+function buildCandidatePool(openedInfo, excluded){
+  const total = state.rows*state.cols;
+  const pool = [];
+  for (let i=0;i<total;i++){
+    if (openedInfo.has(i)) continue;
+    if (excluded.has(i)) continue;
+    pool.push(i);
+  }
+  return pool;
+}
+
+/* candidatePoolの中からbombCount個を選び、間隔制約とリング被覆制約を満たす
+   配置が存在するか「存在確認のみ」行う（見つかり次第true）。
+   forcedIncludeで「このマスは必ず爆弾」という仮定を追加できる。
+   探索ノード数が予算を超えた場合は安全側に倒して 'UNKNOWN' を返す。 */
+function isFeasible(candidatePool, ringReqs, bombCount, forcedInclude, nodeBudget){
+  for (const f of forcedInclude){
+    if (!candidatePool.includes(f)) return false;
+  }
+  const n = candidatePool.length;
+  if (n < bombCount) return false;
+
+  const chosen = forcedInclude.slice();
+  for (let i=0;i<chosen.length;i++){
+    for (let j=i+1;j<chosen.length;j++){
+      const [r1,c1] = rcOf(chosen[i]);
+      const [r2,c2] = rcOf(chosen[j]);
+      if (Math.max(Math.abs(r1-r2),Math.abs(c1-c2)) < 2) return false;
+    }
+  }
+
+  let nodes = 0;
+  let budgetExceeded = false;
+
+  function ringsSatisfied(){
+    return ringReqs.every(ring => ring.some(idx => chosen.includes(idx)));
+  }
+
+  function backtrack(startIdx){
+    nodes++;
+    if (nodes > nodeBudget){ budgetExceeded = true; return false; }
+    if (chosen.length === bombCount){
+      return ringsSatisfied();
+    }
+    const remainingSlots = bombCount - chosen.length;
+    if (n - startIdx < remainingSlots) return false;
+    for (let i=startIdx;i<n;i++){
+      const cand = candidatePool[i];
+      if (chosen.includes(cand)) continue;
+      let ok = true;
+      const [r1,c1] = rcOf(cand);
+      for (const other of chosen){
+        const [r2,c2] = rcOf(other);
+        if (Math.max(Math.abs(r1-r2),Math.abs(c1-c2)) < 2){ ok=false; break; }
+      }
+      if (!ok) continue;
+      chosen.push(cand);
+      if (backtrack(i+1)) return true;
+      chosen.pop();
+      if (budgetExceeded) return false;
+    }
+    return false;
+  }
+
+  const result = backtrack(0);
+  if (budgetExceeded) return 'UNKNOWN';
+  return result;
+}
+
+function isBoardGuessFree(firstR, firstC){
+  const total = state.rows*state.cols;
+  const bombCount = state.bombCount;
+  const totalSafeCount = total - bombCount;
+  const deadline = Date.now() + PER_BOARD_VERIFY_MS;
+
+  const openedInfo = new Map();
+  const firstIdx = idxOf(firstR, firstC);
+  openedInfo.set(firstIdx, state.board[firstR][firstC].dist);
+
+  let progress = true;
+  while (progress){
+    progress = false;
+    if (Date.now() > deadline) return false;
+
+    const { excluded, ringReqs } = buildConstraints(openedInfo);
+
+    // 既にわかっている除外範囲に入っている安全マスは、無条件で開いたことにできる
+    for (let idx=0; idx<total; idx++){
+      if (openedInfo.has(idx)) continue;
+      const [r,c] = rcOf(idx);
+      if (state.board[r][c].isBomb) continue;
+      if (excluded.has(idx)){
+        openedInfo.set(idx, state.board[r][c].dist);
+        progress = true;
+      }
+    }
+    if (progress) continue;
+
+    const candidatePool = buildCandidatePool(openedInfo, excluded);
+
+    for (let idx=0; idx<total; idx++){
+      if (openedInfo.has(idx)) continue;
+      const [r,c] = rcOf(idx);
+      if (state.board[r][c].isBomb) continue;
+      if (Date.now() > deadline) return false;
+
+      const feasible = isFeasible(candidatePool, ringReqs, bombCount, [idx], NODE_BUDGET_PER_CHECK);
+      if (feasible === false){
+        // 「このマスが爆弾」だと仮定すると既知の情報と矛盾する → 安全だと証明できた
+        openedInfo.set(idx, state.board[r][c].dist);
+        progress = true;
+        break;
+      }
+    }
+  }
+
+  return openedInfo.size === totalSafeCount;
+}
+
+/* =========================================================================
+   セルを開く
+   ========================================================================= */
+function openCell(r,c){
+  if (state.phase !== 'playing') return;
+  if (state.generating) return;
+  const cell = state.board[r][c];
+  if (cell.opened || cell.exploded) return;
+
+  if (state.mode === 'open'){
+    performOpenTurnMove(r,c);
+    return;
+  }
+
+  if (!state.boardGenerated){
+    state.generating = true;
+    showGeneratingBanner(true);
+    // 描画を1フレーム挟んでから重い検証処理を実行する（UIが固まって見えないように）
+    setTimeout(()=>{
+      generateVerifiedBoard(r,c);
+      state.boardGenerated = true;
+      state.generating = false;
+      showGeneratingBanner(false);
+      startTimer();
+      showToast(state.boardWasVerifiedGuessFree
+        ? '✓ この盤面は論理的に賭けなしで解けます'
+        : '通常生成の盤面です');
+      resolveOpenCell(r,c);
+    }, 20);
+    return;
+  }
+  resolveOpenCell(r,c);
+}
+
+function resolveOpenCell(r,c){
+  const target = state.board[r][c];
+  if (target.isBomb){
+    target.exploded = true;
+    state.explosionCount++;
+    state.score -= 100;
+    renderAll();
+    if (state.explosionCount >= state.bombCount){
+      endGameAllExploded();
+      return;
+    }
+  } else {
+    target.opened = true;
+    if (target.dist === CURRENT_DIFFICULTY.distanceCap){
+      revealDistance6Cluster(r,c);
+    }
+    renderAll();
+  }
+}
+
+function showGeneratingBanner(show){
+  const banner = document.getElementById('mode-banner');
+  if (show){
+    banner.textContent = '盤面を検証中 …';
+    banner.classList.remove('revealing-banner');
+    banner.classList.add('show');
+  } else if (state.phase === 'playing') {
+    banner.classList.remove('show');
+  }
+}
+
+/* 距離キャップの特殊効果：中心セルを基準に半径2マス（5x5）範囲内の「未開放かつ
+   同じくキャップ距離のマス」だけを
+   1段階だけ自動開放する（連鎖はしない） */
+function revealDistance6Cluster(centerR, centerC){
+  const cap = CURRENT_DIFFICULTY.distanceCap;
+  for (let dr=-2; dr<=2; dr++){
+    for (let dc=-2; dc<=2; dc++){
+      const r = centerR+dr, c = centerC+dc;
+      if (dr===0 && dc===0) continue;
+      if (!inBounds(r,c)) continue;
+      const cell = state.board[r][c];
+      if (cell.isBomb) continue;
+      if (cell.opened) continue;
+      if (cell.dist === cap){
+        cell.opened = true; // 直接開放のみ。ここから再帰的な自動開放は行わない
+      }
+    }
+  }
+}
+
+/* =========================================================================
+   GUESSモード
+   ========================================================================= */
+function enterGuessMode(){
+  if (state.mode === 'open') return; // Open MinesはdeclareOpenGuess()経由で行う
+  if (state.phase !== 'playing') return;
+  if (!state.boardGenerated) return; // まだ何も開いていない場合は入れない
+  state.phase = 'guessing';
+  stopTimer(); // GUESSモード中はタイマーを止め、じっくり考えられるようにする
+  renderAll();
+}
+
+function toggleFlag(r,c){
+  if (state.phase !== 'guessing') return;
+  const cell = state.board[r][c];
+  if (cell.opened || cell.exploded) return;
+  const maxGuess = state.bombCount - state.explosionCount;
+  if (cell.flagged){
+    cell.flagged = false;
+    state.flagCount--;
+  } else {
+    if (state.flagCount >= maxGuess){
+      showToast('これ以上GUESSできません（残り0）');
+      return;
+    }
+    cell.flagged = true;
+    state.flagCount++;
+  }
+  renderAll();
+}
+
+function confirmGuess(){
+  if (state.phase !== 'guessing' && state.phase !== 'playing') return;
+  if (state.mode === 'open') return finalizeOpenGuess();
+  return finalizeGame();
+}
+
+/* =========================================================================
+   終了処理・採点
+   ========================================================================= */
+function endGameAllExploded(){
+  if (state.mode === 'open'){ finishOpenMatchAllExploded(); return; }
+  // 全爆弾爆発 = 即ゲームオーバー（GUESSは行われない）
+  finalizeGame(true);
+}
+
+async function finalizeGame(skipGuessCheck){
+  if (state.phase === 'revealing' || state.phase === 'result') return; // 二重確定防止
+  stopTimer();
+
+  let guessSuccess = 0, guessFail = 0;
+  if (!skipGuessCheck){
+    forEachCell((r,c,cell)=>{
+      if (cell.flagged){
+        if (cell.isBomb) guessSuccess++;
+        else guessFail++;
+      }
+    });
+  }
+  state.guessSuccess = guessSuccess;
+  state.guessFail = guessFail;
+
+  let unopenedCount = 0;
+  forEachCell((r,c,cell)=>{
+    if (!cell.opened && !cell.exploded) unopenedCount++;
+  });
+
+  const guessScore = guessSuccess*200 - guessFail*150;
+  const unopenedScore = unopenedCount*5;
+  const perfectBonus = (state.explosionCount===0 && guessSuccess===state.bombCount) ? 777 : 0;
+  // ソロプレイのみ：残り秒数の半分をそのままスコアに加算するタイムボーナス（0.5などの端数もそのまま加算）
+  const timeBonus = (state.mode === 'solo') ? state.timeLeft / 2 : 0;
+
+  const breakdown = {
+    explosionPenalty: state.explosionCount * -100,
+    guessSuccess, guessFail, guessScore,
+    unopenedCount, unopenedScore,
+    perfectBonus,
+    timeBonus
+  };
+
+  state.score = state.score + guessScore + unopenedScore + perfectBonus + timeBonus;
+  state.finishedBreakdown = breakdown;
+
+  // Dual Minesの場合、確定した瞬間に自分の結果をSkyWay経由で相手に送信する
+  // （相手クライアントがこれを受信して「相手がGUESSしました」20秒カウントダウンを開始する）
+  if (state.mode === 'dual'){
+    hideDualGuessBanner();
+    skywaySend({
+      type: 'result',
+      result: {
+        score: state.score,
+        timeLeft: state.timeLeft,
+        unopenedCount: breakdown.unopenedCount,
+        explosions: state.explosionCount,
+        guessSuccess: breakdown.guessSuccess
+      }
+    });
+    state.dual.resultSubmitted = true;
+  }
+
+  // ここから答え合わせの演出。ゲーム画面上でボードをフリップ表示してから結果画面へ。
+  state.phase = 'revealing';
+  state.revealOrder = buildRevealOrder();
+  renderHUD();
+  renderModeUI();
+  await playRevealAnimation();
+
+  state.phase = 'result';
+  renderBoard();
+
+  if (state.mode === 'dual'){
+    showDualResultScreen();
+  } else {
+    showResultScreen();
+  }
+}
+
+/* 答え合わせで演出対象にするマスの順番を決める（爆弾を先に、続けて外れGUESSの旗） */
+function buildRevealOrder(){
+  const order = [];
+  forEachCell((r,c,cell)=>{ if (cell.isBomb) order.push(`${r},${c}`); });
+  forEachCell((r,c,cell)=>{ if (cell.flagged && !cell.isBomb) order.push(`${r},${c}`); });
+  const map = new Map();
+  order.forEach((key, i)=> map.set(key, i));
+  return map;
+}
+
+/* ボードに答え合わせ表示を適用し、演出時間が終わるまで待つ */
+function playRevealAnimation(){
+  renderBoard();
+  const count = state.revealOrder.size;
+  const total = count > 0
+    ? (count - 1) * state.revealDelayStep + state.revealAnimDuration
+    : 250;
+  return new Promise(resolve => setTimeout(resolve, total + 150));
+}
+
+/* =========================================================================
+   タイマー
+   ========================================================================= */
+function startTimer(){
+  stopTimer();
+  state.timerId = setInterval(()=>{
+    state.timeLeft--;
+    if (state.timeLeft <= 0){
+      state.timeLeft = 0;
+      renderHUD();
+      timeUp();
+      return;
+    }
+    renderHUD();
+  }, 1000);
+}
+function stopTimer(){
+  if (state.timerId){ clearInterval(state.timerId); state.timerId = null; }
+}
+function timeUp(){
+  // 時間切れ：自動でGUESSモードへ移行し、そのまま答え合わせ（現在の旗の状態で確定）
+  if (state.phase === 'result' || state.phase === 'revealing') return;
+  state.phase = 'guessing';
+  finalizeGame();
+}
+
+/* =========================================================================
+   新規ゲーム開始
+   ========================================================================= */
+function startNewGame(){
+  stopAllDualTimers();
+  stopAllOpenTimers();
+  state.mode = 'solo';
+  document.getElementById('dual-opponent-bar').style.display = 'none';
+  hideDualGuessBanner();
+  document.getElementById('open-hud').style.display = 'none';
+  document.getElementById('normal-hud').style.display = 'grid';
+  document.getElementById('open-turn-bar').style.display = 'none';
+  hideOpenGuessBanner();
+
+  initEmptyBoard();
+  state.score = 0;
+  state.explosionCount = 0;
+  state.flagCount = 0;
+  state.guessSuccess = 0;
+  state.guessFail = 0;
+  state.finished = false;
+  state.generating = false;
+  state.boardWasVerifiedGuessFree = false;
+  state.timeLeft = CURRENT_DIFFICULTY.timeLimit;
+  state.phase = 'playing';
+  buildBoardDOM();
+  renderAll();
+  showScreen('screen-game');
+}
+
+/* =========================================================================
+   Dual Mines：対戦フロー（SkyWay P2P通信を使用）
+   ロビー(作成/参加) → 相手入室検知 → 盤面生成/送信 → カウントダウン → 対戦
+   → 相手GUESS通知/20秒猶予 → 結果送信・突き合わせ → リマッチ
+   ========================================================================= */
+
+function hideDualGuessBanner(){
+  const banner = document.getElementById('dual-guess-banner');
+  banner.style.display = 'none';
+  banner.textContent = '';
+}
+
+function stopAllDualTimers(){
+  if (state.dual.opponentGuessTickId){ clearTimeout(state.dual.opponentGuessTickId); state.dual.opponentGuessTickId = null; }
+}
+
+function setDualWaitingStatus(text){
+  const el = document.getElementById('dual-waiting-status');
+  if (el) el.textContent = text;
+}
+
+function setRuleTab(which){
+  document.getElementById('rule-tab-solo').classList.toggle('active', which==='solo');
+  document.getElementById('rule-tab-dual').classList.toggle('active', which==='dual');
+  document.getElementById('rule-tab-open').classList.toggle('active', which==='open');
+  document.getElementById('rule-tab-sentinel').classList.toggle('active', which==='sentinel');
+  document.getElementById('rules-scroll-solo').style.display = which==='solo' ? 'flex' : 'none';
+  document.getElementById('rules-scroll-dual').style.display = which==='dual' ? 'flex' : 'none';
+  document.getElementById('rules-scroll-open').style.display = which==='open' ? 'flex' : 'none';
+  document.getElementById('rules-scroll-sentinel').style.display = which==='sentinel' ? 'flex' : 'none';
+}
+
+/* ---------- 部屋を作る ---------- */
+async function handleDualCreate(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const btn = document.getElementById('btn-dual-create');
+  btn.disabled = true;
+  try{
+    const code = generateDualRoomCode();
+    state.dual.code = code;
+    state.dual.role = 'host';
+    state.dual.myName = state.playerName;
+    state.dual.opponentName = '';
+    await skywayJoinRoom(dualRoomNameFromCode(code), 'host', 'create', {
+      onMessage: handleDualMessage,
+      onPeerJoined: ()=> onDualPeerJoined(),
+      onPeerLeft: ()=> handleDualOpponentDisconnected()
+    });
+    enterDualWaitingAsHost(code);
+  } catch(e){
+    console.error('handleDualCreate error:', e);
+    showToast('ルーム作成中にエラーが発生しました');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterDualWaitingAsHost(code){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-countdown-number').style.display = 'none';
+  const codeEl = document.getElementById('dual-waiting-code');
+  codeEl.style.display = 'block';
+  codeEl.textContent = code;
+  setDualWaitingStatus('このコードを相手に伝えて「参加する」を押してもらいましょう');
+}
+
+/* ホストの相手(guest)が入室してきたときに呼ばれる。盤面を生成して送信する。 */
+async function onDualPeerJoined(){
+  setDualWaitingStatus('相手が参加しました。盤面を準備しています…');
+  skywaySend({ type:'hello', name: state.playerName });
+  dualHostGenerateAndSend();
+}
+
+function dualHostGenerateAndSend(){
+  initEmptyBoard();
+  generateVerifiedBoard(DUAL_FIRST_CELL.r, DUAL_FIRST_CELL.c);
+  const bombs = [];
+  forEachCell((r,c,cell)=>{ if (cell.isBomb) bombs.push([r,c]); });
+  const verified = state.boardWasVerifiedGuessFree;
+  const boardData = { bombs, verified };
+  skywaySend({ type:'board', bombs, verified, hostName: state.playerName });
+  runDualCountdown(boardData);
+}
+
+/* ---------- 参加する ---------- */
+async function handleDualJoin(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const input = document.getElementById('dual-join-code');
+  const code = input.value.trim();
+  if (!/^[0-9]{5}$/.test(code)){
+    showToast('5桁の数字コードを入力してください');
+    return;
+  }
+  const btn = document.getElementById('btn-dual-join');
+  btn.disabled = true;
+  try{
+    state.dual.code = code;
+    state.dual.role = 'guest';
+    state.dual.myName = state.playerName;
+    state.dual.opponentName = '';
+    await skywayJoinRoom(dualRoomNameFromCode(code), 'guest', 'find', {
+      onMessage: handleDualMessage,
+      onPeerLeft: ()=> handleDualOpponentDisconnected()
+    });
+    skywaySend({ type:'hello', name: state.playerName });
+    enterDualWaitingAsGuest(code);
+  } catch(e){
+    console.error('handleDualJoin error:', e);
+    showToast('そのルームコードは見つかりませんでした');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterDualWaitingAsGuest(code){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-countdown-number').style.display = 'none';
+  document.getElementById('dual-waiting-code').style.display = 'none';
+  setDualWaitingStatus('ホストが盤面を準備しています…');
+}
+
+/* ---------- 受信メッセージのハンドリング ---------- */
+function handleDualMessage(msg){
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'hello':
+      state.dual.opponentName = msg.name || '相手';
+      updateDualOpponentNameUI();
+      break;
+    case 'board':
+      state.dual.opponentName = msg.hostName || state.dual.opponentName || '相手';
+      runDualCountdown({ bombs: msg.bombs, verified: msg.verified });
+      break;
+    case 'result':
+      state.dual.opponentResult = msg.result;
+      if (!state.dual.opponentGuessHandled && (state.phase === 'playing' || state.phase === 'guessing')){
+        state.dual.opponentGuessHandled = true;
+        startOpponentGuessCountdown(Date.now() + DUAL_GUESS_GRACE_MS);
+      }
+      renderDualResultIfReady();
+      break;
+    case 'rematchReady':
+      state.dual.opponentRematchReady = true;
+      checkDualBothRematchReady();
+      break;
+  }
+}
+
+function updateDualOpponentNameUI(){
+  const nameEl = document.getElementById('dual-opponent-name');
+  if (nameEl && state.mode === 'dual') nameEl.textContent = `VS ${state.dual.opponentName || '相手'}`;
+}
+
+/* ---------- カウントダウン（お互い受信タイミングで独立に開始） ---------- */
+function runDualCountdown(boardData){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-waiting-code').style.display = 'none';
+  const numberEl = document.getElementById('dual-countdown-number');
+  numberEl.style.display = 'block';
+  setDualWaitingStatus('まもなく対戦開始');
+
+  let remain = DUAL_COUNTDOWN_SECONDS;
+  numberEl.textContent = String(remain);
+  const iv = setInterval(()=>{
+    remain--;
+    if (remain <= 0){
+      clearInterval(iv);
+      numberEl.textContent = 'START!';
+      setTimeout(()=> startDualGame(boardData), 350);
+    } else {
+      numberEl.textContent = String(remain);
+    }
+  }, 1000);
+}
+
+/* ---------- 対戦開始 ---------- */
+function startDualGame(boardData){
+  stopAllOpenTimers();
+  initEmptyBoard();
+  applyBombs(boardData.bombs);
+
+  state.mode = 'dual';
+  state.dual.opponentGuessDeadline = null;
+  state.dual.opponentGuessHandled = false;
+  state.dual.resultSubmitted = false;
+  state.dual.opponentResult = null;
+  state.dual.opponentDisconnected = false;
+  state.dual.rematchReady = false;
+  state.dual.opponentRematchReady = false;
+
+  state.score = 0;
+  state.explosionCount = 0;
+  state.flagCount = 0;
+  state.guessSuccess = 0;
+  state.guessFail = 0;
+  state.finished = false;
+  state.generating = false;
+  state.boardWasVerifiedGuessFree = boardData.verified;
+  state.boardGenerated = true;
+  state.timeLeft = CURRENT_DIFFICULTY.timeLimit;
+  state.phase = 'playing';
+
+  buildBoardDOM();
+  document.getElementById('normal-hud').style.display = 'grid';
+  document.getElementById('open-hud').style.display = 'none';
+  document.getElementById('open-turn-bar').style.display = 'none';
+  hideOpenGuessBanner();
+  const oppBar = document.getElementById('dual-opponent-bar');
+  oppBar.style.display = 'block';
+  updateDualOpponentNameUI();
+  hideDualGuessBanner();
+
+  const rematchBtn = document.getElementById('btn-dual-rematch');
+  rematchBtn.disabled = false;
+  rematchBtn.textContent = 'リマッチ';
+  document.getElementById('dual-my-card').classList.remove('winner');
+  document.getElementById('dual-opp-card').classList.remove('winner');
+
+  renderAll();
+  showScreen('screen-game');
+
+  // Dual Minesでは「初手クリックで盤面生成」は使わない。共通の初手セルを自動で開く
+  resolveOpenCell(DUAL_FIRST_CELL.r, DUAL_FIRST_CELL.c);
+
+  startTimer();
+}
+
+/* ---------- 相手のGUESS通知・20秒猶予 ---------- */
+function startOpponentGuessCountdown(deadlineMs){
+  state.dual.opponentGuessDeadline = deadlineMs;
+  const banner = document.getElementById('dual-guess-banner');
+  banner.style.display = 'block';
+
+  function tick(){
+    if (state.phase === 'result' || state.phase === 'revealing'){
+      banner.style.display = 'none';
+      return;
+    }
+    const remainMs = state.dual.opponentGuessDeadline - Date.now();
+    if (remainMs <= 0){
+      banner.style.display = 'none';
+      forceDualFinalizeDueToOpponent();
+      return;
+    }
+    banner.textContent = `⚡ 相手がGUESSしました！残り${Math.ceil(remainMs/1000)}秒`;
+    state.dual.opponentGuessTickId = setTimeout(tick, 250);
+  }
+  tick();
+}
+
+function forceDualFinalizeDueToOpponent(){
+  if (state.phase !== 'playing' && state.phase !== 'guessing') return;
+  showToast('20秒経過。現在の状態でGUESSを確定します');
+  state.phase = 'guessing';
+  finalizeGame();
+}
+
+/* ---------- 結果表示・突き合わせ ---------- */
+async function showDualResultScreen(){
+  showScreen('screen-dual-result');
+
+  document.getElementById('dual-my-score').textContent = state.score;
+  const b = state.finishedBreakdown || {};
+  document.getElementById('dual-my-meta').innerHTML =
+    `残り${state.timeLeft}s ・ 爆発${state.explosionCount} ・ GUESS成功${b.guessSuccess||0}`;
+  document.getElementById('dual-opp-label').textContent = state.dual.opponentName || 'OPPONENT';
+  document.getElementById('dual-opp-score').textContent = '…';
+  document.getElementById('dual-opp-meta').textContent = '相手の結果を待っています…';
+  document.getElementById('dual-outcome-banner').textContent = '対戦結果を集計しています…';
+  document.getElementById('dual-outcome-banner').className = 'dual-outcome';
+
+  if (state.dual.opponentDisconnected || state.dual.opponentResult){
+    renderDualResultIfReady();
+  }
+}
+
+function renderDualResultIfReady(){
+  if (state.phase !== 'result') return; // 自分がまだ確定していなければ表示しない
+  const oppScoreEl = document.getElementById('dual-opp-score');
+  const oppMetaEl = document.getElementById('dual-opp-meta');
+  const banner = document.getElementById('dual-outcome-banner');
+  const myCard = document.getElementById('dual-my-card');
+  const oppCard = document.getElementById('dual-opp-card');
+
+  if (state.dual.opponentDisconnected && !state.dual.opponentResult){
+    oppScoreEl.textContent = '―';
+    oppMetaEl.textContent = '通信切断';
+    banner.textContent = '🏆 相手の切断によりあなたの勝ち';
+    banner.className = 'dual-outcome win';
+    myCard.classList.add('winner');
+    oppCard.classList.remove('winner');
+    return;
+  }
+
+  if (!state.dual.opponentResult) return;
+
+  const opp = state.dual.opponentResult;
+  oppScoreEl.textContent = opp.score;
+  oppMetaEl.textContent = `残り${opp.timeLeft}s ・ 爆発${opp.explosions} ・ GUESS成功${opp.guessSuccess}`;
+
+  const myScore = state.score, myTime = state.timeLeft;
+  let outcome;
+  if (myScore !== opp.score){
+    outcome = myScore > opp.score ? 'win' : 'lose';
+  } else if (myTime !== opp.timeLeft){
+    outcome = myTime > opp.timeLeft ? 'win' : 'lose';
+  } else {
+    outcome = 'draw';
+  }
+
+  myCard.classList.toggle('winner', outcome==='win');
+  oppCard.classList.toggle('winner', outcome==='lose');
+  if (outcome==='win'){ banner.textContent='🏆 WIN'; banner.className='dual-outcome win'; }
+  else if (outcome==='lose'){ banner.textContent='LOSE'; banner.className='dual-outcome lose'; }
+  else { banner.textContent='DRAW'; banner.className='dual-outcome'; }
+}
+
+/* ---------- 通信切断 ---------- */
+function handleDualOpponentDisconnected(){
+  if (state.mode !== 'dual') return;
+  state.dual.opponentDisconnected = true;
+  showToast('相手との通信が切れました。あなたの勝ちです');
+  if (state.phase === 'playing' || state.phase === 'guessing'){
+    finalizeGame();
+  } else if (state.phase === 'result'){
+    renderDualResultIfReady();
+  }
+}
+
+/* ---------- リマッチ ---------- */
+async function requestDualRematch(){
+  state.dual.rematchReady = true;
+  const btn = document.getElementById('btn-dual-rematch');
+  btn.disabled = true;
+  btn.textContent = '相手を待っています…';
+  skywaySend({ type:'rematchReady' });
+  checkDualBothRematchReady();
+}
+
+function checkDualBothRematchReady(){
+  if (state.dual.rematchReady && state.dual.opponentRematchReady){
+    if (state.dual.role === 'host'){
+      dualHostGenerateAndSend();
+    }
+    // guest側は host からの新しい 'board' メッセージ受信でカウントダウンが始まる
+  }
+}
+
+/* ---------- ホームへ戻る ---------- */
+function goHomeFromDual(){
+  stopAllDualTimers();
+  skywayLeaveRoom();
+  state.mode = 'solo';
+  state.dual.code = null;
+  state.dual.role = null;
+  state.dual.opponentName = '';
+  state.dual.opponentResult = null;
+  state.dual.opponentDisconnected = false;
+  state.dual.resultSubmitted = false;
+  state.dual.rematchReady = false;
+  state.dual.opponentRematchReady = false;
+  document.getElementById('dual-opponent-bar').style.display = 'none';
+  hideDualGuessBanner();
+  const rematchBtn = document.getElementById('btn-dual-rematch');
+  rematchBtn.disabled = false;
+  rematchBtn.textContent = 'リマッチ';
+  showScreen('screen-home');
+}
+
+
+/* =========================================================================
+   Open Mines：盤面共有・交互ターン対戦フロー（SkyWay P2P通信を使用）
+   Dual Minesと同じ接続基盤を使い、盤面そのものを共有してターン制で進める。
+   ========================================================================= */
+
+function hideOpenGuessBanner(){
+  const banner = document.getElementById('open-guess-banner');
+  banner.style.display = 'none';
+  banner.textContent = '';
+}
+
+function stopOpenTurnTicker(){
+  if (state.open.turnTickId){ clearInterval(state.open.turnTickId); state.open.turnTickId = null; }
+}
+function stopOpenGuessCountdown(){
+  if (state.open.guessTickId){ clearTimeout(state.open.guessTickId); state.open.guessTickId = null; }
+  hideOpenGuessBanner();
+}
+function stopAllOpenTimers(){
+  stopOpenTurnTicker();
+  stopOpenGuessCountdown();
+}
+
+/* 盤面のopened/exploded状態を64要素の配列にシリアライズ(0=未開放,1=安全,2=爆発済み) */
+function serializeCellStates(){
+  const arr = new Array(state.rows*state.cols).fill(0);
+  forEachCell((r,c,cell)=>{
+    const idx = r*state.cols + c;
+    if (cell.exploded) arr[idx] = 2;
+    else if (cell.opened) arr[idx] = 1;
+  });
+  return arr;
+}
+/* 受け取ったcellStatesをローカル盤面に反映し、爆発数を再計算する */
+function applyCellStates(cellStates){
+  if (!cellStates) return;
+  forEachCell((r,c,cell)=>{
+    const idx = r*state.cols + c;
+    const v = cellStates[idx];
+    cell.opened = (v === 1);
+    cell.exploded = (v === 2);
+  });
+  let explosions = 0;
+  forEachCell((r,c,cell)=>{ if (cell.exploded) explosions++; });
+  state.explosionCount = explosions;
+}
+
+/* ---------- 部屋を作る ---------- */
+async function handleOpenCreate(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const btn = document.getElementById('btn-open-create');
+  btn.disabled = true;
+  try{
+    const code = generateDualRoomCode();
+    state.open.code = code;
+    state.open.role = 'host';
+    state.open.myName = state.playerName;
+    state.open.opponentName = '';
+    await skywayJoinRoom(openRoomNameFromCode(code), 'host', 'create', {
+      onMessage: handleOpenMessage,
+      onPeerJoined: ()=> onOpenPeerJoined(),
+      onPeerLeft: ()=> handleOpenOpponentDisconnected()
+    });
+    enterOpenWaitingAsHost(code);
+  } catch(e){
+    console.error('handleOpenCreate error:', e);
+    showToast('ルーム作成中にエラーが発生しました');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterOpenWaitingAsHost(code){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-countdown-number').style.display = 'none';
+  const codeEl = document.getElementById('dual-waiting-code');
+  codeEl.style.display = 'block';
+  codeEl.textContent = code;
+  setDualWaitingStatus('このコードを相手に伝えて「参加する」を押してもらいましょう');
+}
+
+async function onOpenPeerJoined(){
+  setDualWaitingStatus('相手が参加しました。盤面を準備しています…');
+  skywaySend({ type:'hello', name: state.playerName });
+  openHostGenerateAndSend();
+}
+
+/* ホストが盤面生成(検証込み)・先攻後攻抽選・初手セル開放を行い、相手へ送信する */
+function openHostGenerateAndSend(){
+  initEmptyBoard();
+  generateVerifiedBoard(OPEN_FIRST_CELL.r, OPEN_FIRST_CELL.c);
+  const bombs = [];
+  forEachCell((r,c,cell)=>{ if (cell.isBomb) bombs.push([r,c]); });
+  const verified = state.boardWasVerifiedGuessFree;
+
+  // 共有盤面の初手セルは全員に見える状態であらかじめ開けておく
+  state.board[OPEN_FIRST_CELL.r][OPEN_FIRST_CELL.c].opened = true;
+  const cellStates = serializeCellStates();
+  const firstTurn = Math.random() < 0.5 ? 'host' : 'guest';
+  const boardData = { bombs, verified, cellStates, firstTurn };
+  skywaySend({ type:'board', bombs, verified, cellStates, firstTurn });
+  runOpenCountdown(boardData);
+}
+
+/* ---------- 参加する ---------- */
+async function handleOpenJoin(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const input = document.getElementById('open-join-code');
+  const code = input.value.trim();
+  if (!/^[0-9]{5}$/.test(code)){
+    showToast('5桁の数字コードを入力してください');
+    return;
+  }
+  const btn = document.getElementById('btn-open-join');
+  btn.disabled = true;
+  try{
+    state.open.code = code;
+    state.open.role = 'guest';
+    state.open.myName = state.playerName;
+    state.open.opponentName = '';
+    await skywayJoinRoom(openRoomNameFromCode(code), 'guest', 'find', {
+      onMessage: handleOpenMessage,
+      onPeerLeft: ()=> handleOpenOpponentDisconnected()
+    });
+    skywaySend({ type:'hello', name: state.playerName });
+    enterOpenWaitingAsGuest(code);
+  } catch(e){
+    console.error('handleOpenJoin error:', e);
+    showToast('そのルームコードは見つかりませんでした');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterOpenWaitingAsGuest(code){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-countdown-number').style.display = 'none';
+  document.getElementById('dual-waiting-code').style.display = 'none';
+  setDualWaitingStatus('ホストが盤面を準備しています…');
+}
+
+/* ---------- 受信メッセージのハンドリング ---------- */
+function handleOpenMessage(msg){
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'hello':
+      state.open.opponentName = msg.name || '相手';
+      break;
+    case 'board':
+      runOpenCountdown({ bombs: msg.bombs, verified: msg.verified, cellStates: msg.cellStates, firstTurn: msg.firstTurn });
+      break;
+    case 'move':
+      applyCellStates(msg.cellStates);
+      state.open.oppTimeBank = msg.actingTimeBank;
+      state.open.currentTurn = msg.nextTurn;
+      state.open.turnStartedAtMs = Date.now();
+      renderAll();
+      renderOpenTurnUI();
+      if (state.open.currentTurn === state.open.role){
+        startOpenTurnTicker();
+      } else {
+        stopOpenTurnTicker();
+      }
+      break;
+    case 'guessDeclared':
+      stopOpenTurnTicker();
+      state.phase = 'guessing';
+      state.open.guessDeadlineMs = Date.now() + OPEN_GUESS_PHASE_MS;
+      renderAll();
+      startOpenGuessCountdown();
+      break;
+    case 'guessResult':
+      state.open.opponentResult = msg.result;
+      tryResolveOpenResultLocal();
+      break;
+    case 'matchFinishedAllExploded':
+      applyCellStates(msg.cellStates);
+      stopOpenTurnTicker(); stopOpenGuessCountdown();
+      state.open.opponentResult = { score: msg.score, guessSuccess:0, guessFail:0, explosions: msg.explosions };
+      if (state.phase !== 'result'){
+        state.phase = 'result';
+        renderBoard();
+        showOpenResultScreen();
+      } else {
+        tryResolveOpenResultLocal();
+      }
+      break;
+    case 'rematchReady':
+      state.open.opponentRematchReady = true;
+      checkOpenBothRematchReady();
+      break;
+  }
+}
+
+/* ---------- カウントダウン ---------- */
+function runOpenCountdown(boardData){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-waiting-code').style.display = 'none';
+  const numberEl = document.getElementById('dual-countdown-number');
+  numberEl.style.display = 'block';
+  setDualWaitingStatus('まもなく対戦開始');
+
+  let remain = OPEN_COUNTDOWN_SECONDS;
+  numberEl.textContent = String(remain);
+  const iv = setInterval(()=>{
+    remain--;
+    if (remain <= 0){
+      clearInterval(iv);
+      numberEl.textContent = 'START!';
+      setTimeout(()=> startOpenGame(boardData), 350);
+    } else {
+      numberEl.textContent = String(remain);
+    }
+  }, 1000);
+}
+
+/* ---------- 対戦開始 ---------- */
+function startOpenGame(boardData){
+  stopAllDualTimers();
+  initEmptyBoard();
+  applyBombs(boardData.bombs);
+  applyCellStates(boardData.cellStates);
+
+  state.mode = 'open';
+  state.open.currentTurn = boardData.firstTurn;
+  state.open.turnStartedAtMs = Date.now();
+  state.open.myTimeBank = OPEN_TIME_BANK_SECONDS;
+  state.open.oppTimeBank = OPEN_TIME_BANK_SECONDS;
+  state.open.myExplosions = 0;
+  state.open.myGuessConfirmed = false;
+  state.open.guessDeadlineMs = null;
+  state.open.myResult = null;
+  state.open.opponentResult = null;
+  state.open.opponentDisconnected = false;
+  state.open.finishedAllExploded = false;
+  state.open.rematchReady = false;
+  state.open.opponentRematchReady = false;
+
+  state.score = 0;
+  state.explosionCount = 0;
+  state.flagCount = 0;
+  state.guessSuccess = 0;
+  state.guessFail = 0;
+  state.finished = false;
+  state.generating = false;
+  state.boardWasVerifiedGuessFree = boardData.verified;
+  state.boardGenerated = true;
+  state.phase = 'playing';
+
+  buildBoardDOM();
+
+  document.getElementById('normal-hud').style.display = 'none';
+  document.getElementById('open-hud').style.display = 'grid';
+  document.getElementById('dual-opponent-bar').style.display = 'none';
+  hideDualGuessBanner();
+  document.getElementById('open-turn-bar').style.display = 'block';
+  hideOpenGuessBanner();
+
+  const rematchBtn = document.getElementById('btn-dual-rematch');
+  rematchBtn.disabled = false;
+  rematchBtn.textContent = 'リマッチ';
+  document.getElementById('dual-my-card').classList.remove('winner');
+  document.getElementById('dual-opp-card').classList.remove('winner');
+
+  renderAll();
+  showScreen('screen-game');
+  renderOpenTurnUI();
+  if (state.open.currentTurn === state.open.role){
+    startOpenTurnTicker();
+  }
+}
+
+/* ---------- 自分のターン：マスを開く ---------- */
+function performOpenTurnMove(r,c){
+  if (state.phase !== 'playing') return;
+  if (state.open.currentTurn !== state.open.role) return; // 自分のターンでなければ無視
+  const cell = state.board[r][c];
+  if (cell.opened || cell.exploded) return;
+
+  if (cell.isBomb){
+    cell.exploded = true;
+    state.score -= 100;
+    state.open.myExplosions++;
+  } else {
+    cell.opened = true;
+    if (cell.dist === CURRENT_DIFFICULTY.distanceCap){
+      revealDistance6Cluster(r,c);
+    }
+  }
+
+  let explosions = 0;
+  forEachCell((rr,cc,cellX)=>{ if (cellX.exploded) explosions++; });
+  state.explosionCount = explosions;
+  renderAll();
+
+  const allExploded = (state.explosionCount >= state.bombCount);
+  submitOpenTurnResult(allExploded);
+}
+
+function submitOpenTurnResult(allExploded){
+  stopOpenTurnTicker();
+  const elapsedSec = Math.max(0, Math.round((Date.now() - state.open.turnStartedAtMs)/1000));
+  const newMyBank = Math.max(0, state.open.myTimeBank - elapsedSec);
+  state.open.myTimeBank = newMyBank;
+  const cellStates = serializeCellStates();
+
+  if (allExploded){
+    skywaySend({ type:'matchFinishedAllExploded', cellStates, score: state.score, explosions: state.open.myExplosions });
+    finishOpenMatchAllExploded();
+  } else {
+    const nextTurn = state.open.role === 'host' ? 'guest' : 'host';
+    skywaySend({ type:'move', cellStates, nextTurn, actingTimeBank: newMyBank });
+    state.open.currentTurn = nextTurn;
+    state.open.turnStartedAtMs = Date.now();
+    renderOpenTurnUI();
+  }
+}
+
+function finishOpenMatchAllExploded(){
+  state.open.finishedAllExploded = true;
+  state.open.myResult = { score: state.score, guessSuccess:0, guessFail:0, explosions: state.open.myExplosions };
+  stopOpenTurnTicker();
+  state.phase = 'result';
+  renderBoard();
+  showOpenResultScreen();
+}
+
+/* ---------- GUESSの宣言（自分のターン中、または持ち時間切れで自動） ---------- */
+async function declareOpenGuess(){
+  if (state.mode !== 'open') return;
+  if (state.phase !== 'playing') return;
+  if (state.open.currentTurn !== state.open.role) return;
+
+  stopOpenTurnTicker();
+  const elapsedSec = Math.max(0, Math.round((Date.now() - state.open.turnStartedAtMs)/1000));
+  state.open.myTimeBank = Math.max(0, state.open.myTimeBank - elapsedSec);
+
+  state.phase = 'guessing';
+  state.open.guessDeadlineMs = Date.now() + OPEN_GUESS_PHASE_MS;
+  skywaySend({ type:'guessDeclared' });
+  renderAll();
+  startOpenGuessCountdown();
+}
+
+function startOpenGuessCountdown(){
+  const banner = document.getElementById('open-guess-banner');
+  banner.style.display = 'block';
+  function tick(){
+    if (state.phase !== 'guessing'){
+      banner.style.display = 'none';
+      return;
+    }
+    const remainMs = state.open.guessDeadlineMs - Date.now();
+    if (remainMs <= 0){
+      banner.style.display = 'none';
+      if (!state.open.myGuessConfirmed) finalizeOpenGuess();
+      return;
+    }
+    banner.textContent = `⏱ GUESSフェーズ ― 残り${Math.ceil(remainMs/1000)}秒`;
+    state.open.guessTickId = setTimeout(tick, 250);
+  }
+  tick();
+}
+
+/* ---------- 自分のGUESS確定 ---------- */
+async function finalizeOpenGuess(){
+  if (state.phase !== 'guessing') return;
+  if (state.open.myGuessConfirmed) return;
+  state.open.myGuessConfirmed = true;
+  stopOpenGuessCountdown();
+
+  let guessSuccess = 0, guessFail = 0;
+  forEachCell((r,c,cell)=>{
+    if (cell.flagged){
+      if (cell.isBomb) guessSuccess++; else guessFail++;
+    }
+  });
+  const guessScore = guessSuccess*200 - guessFail*150;
+  state.score += guessScore;
+  const myResult = { score: state.score, guessSuccess, guessFail, explosions: state.open.myExplosions };
+  state.open.myResult = myResult;
+  state.finishedBreakdown = {
+    explosionPenalty: state.open.myExplosions * -100,
+    guessSuccess, guessFail, guessScore,
+    unopenedCount: 0, unopenedScore: 0, perfectBonus: 0
+  };
+
+  skywaySend({ type:'guessResult', result: myResult });
+
+  state.phase = 'result';
+  renderBoard();
+  showOpenResultScreen();
+}
+
+/* ---------- 通信切断 ---------- */
+function handleOpenOpponentDisconnected(){
+  if (state.mode !== 'open') return;
+  state.open.opponentDisconnected = true;
+  showToast('相手との通信が切れました。あなたの勝ちです');
+  stopOpenTurnTicker();
+  stopOpenGuessCountdown();
+  if (state.phase !== 'result'){
+    state.phase = 'result';
+    renderBoard();
+    showOpenResultScreen();
+  } else {
+    document.getElementById('dual-opp-score').textContent = '―';
+    document.getElementById('dual-opp-meta').textContent = '通信切断';
+    document.getElementById('dual-outcome-banner').textContent = '🏆 相手の切断によりあなたの勝ち';
+    document.getElementById('dual-outcome-banner').className = 'dual-outcome win';
+    document.getElementById('dual-my-card').classList.add('winner');
+  }
+}
+
+/* ---------- ターン表示・持ち時間表示 ---------- */
+function renderOpenTurnUI(){
+  const bar = document.getElementById('open-turn-bar');
+  const isMyTurn = state.open.currentTurn === state.open.role;
+  bar.classList.toggle('my-turn', isMyTurn);
+  bar.classList.toggle('opp-turn', !isMyTurn);
+  bar.textContent = isMyTurn ? '🟢 あなたの番です' : `⏳ ${state.open.opponentName || '相手'}の番です`;
+
+  const enterBtn = document.getElementById('btn-guess-enter');
+  if (state.mode === 'open'){
+    enterBtn.disabled = !(state.phase === 'playing' && isMyTurn);
+  }
+}
+
+function renderOpenTimeBanks(){
+  const elapsed = Math.max(0, Math.floor((Date.now() - state.open.turnStartedAtMs)/1000));
+  let myDisplay = state.open.myTimeBank;
+  let oppDisplay = state.open.oppTimeBank;
+  if (state.open.currentTurn === state.open.role){
+    myDisplay = Math.max(0, state.open.myTimeBank - elapsed);
+  } else {
+    oppDisplay = Math.max(0, state.open.oppTimeBank - elapsed);
+  }
+  const myEl = document.getElementById('open-my-time');
+  const oppEl = document.getElementById('open-opp-time');
+  if (myEl) myEl.textContent = myDisplay;
+  if (oppEl) oppEl.textContent = oppDisplay;
+  const scoreEl = document.getElementById('open-score');
+  if (scoreEl) scoreEl.textContent = state.score;
+  const explEl = document.getElementById('open-explosions');
+  if (explEl) explEl.textContent = `${state.explosionCount}/${state.bombCount}`;
+}
+
+/* 自分のターン中は持ち時間切れを監視し、自動でGUESS宣言する */
+function startOpenTurnTicker(){
+  stopOpenTurnTicker();
+  renderOpenTimeBanks();
+  state.open.turnTickId = setInterval(()=>{
+    renderOpenTimeBanks();
+    if (state.phase === 'playing' && state.open.currentTurn === state.open.role){
+      const elapsed = Math.floor((Date.now() - state.open.turnStartedAtMs)/1000);
+      const remaining = state.open.myTimeBank - elapsed;
+      if (remaining <= 0){
+        stopOpenTurnTicker();
+        showToast('持ち時間切れ。GUESSフェーズへ移行します');
+        declareOpenGuess();
+      }
+    }
+  }, 500);
+}
+
+/* ---------- 結果の突き合わせ ---------- */
+async function showOpenResultScreen(){
+  showScreen('screen-dual-result');
+  document.getElementById('dual-opp-label').textContent = state.open.opponentName || 'OPPONENT';
+  document.getElementById('dual-outcome-banner').textContent = '対戦結果を集計しています…';
+  document.getElementById('dual-outcome-banner').className = 'dual-outcome';
+  document.getElementById('dual-my-card').classList.remove('winner');
+  document.getElementById('dual-opp-card').classList.remove('winner');
+  document.getElementById('dual-my-score').textContent = state.score;
+  document.getElementById('dual-my-meta').textContent = `爆発${state.open.myExplosions}`;
+  document.getElementById('dual-opp-score').textContent = '…';
+  document.getElementById('dual-opp-meta').textContent = '相手の結果を待っています…';
+
+  if (state.open.opponentDisconnected){
+    document.getElementById('dual-opp-score').textContent = '―';
+    document.getElementById('dual-opp-meta').textContent = '通信切断';
+    document.getElementById('dual-outcome-banner').textContent = '🏆 相手の切断によりあなたの勝ち';
+    document.getElementById('dual-outcome-banner').className = 'dual-outcome win';
+    document.getElementById('dual-my-card').classList.add('winner');
+    return;
+  }
+
+  tryResolveOpenResultLocal();
+}
+
+function tryResolveOpenResultLocal(){
+  if (state.phase !== 'result') return;      // 自分がまだ確定していない
+  if (!state.open.myResult) return;
+  if (!state.open.opponentResult) return;    // 相手がまだ確定していない
+
+  const myResult = state.open.myResult;
+  const opp = state.open.opponentResult;
+
+  document.getElementById('dual-my-score').textContent = myResult.score;
+  document.getElementById('dual-my-meta').textContent = `爆発${myResult.explosions} ・ GUESS成功${myResult.guessSuccess||0}`;
+  document.getElementById('dual-opp-score').textContent = opp.score;
+  document.getElementById('dual-opp-meta').textContent = `爆発${opp.explosions||0} ・ GUESS成功${opp.guessSuccess||0}`;
+
+  const banner = document.getElementById('dual-outcome-banner');
+  const myCard = document.getElementById('dual-my-card');
+  const oppCard = document.getElementById('dual-opp-card');
+  let outcome;
+  if (myResult.score !== opp.score) outcome = myResult.score > opp.score ? 'win' : 'lose';
+  else outcome = 'draw';
+  myCard.classList.toggle('winner', outcome==='win');
+  oppCard.classList.toggle('winner', outcome==='lose');
+  if (outcome==='win'){ banner.textContent='🏆 WIN'; banner.className='dual-outcome win'; }
+  else if (outcome==='lose'){ banner.textContent='LOSE'; banner.className='dual-outcome lose'; }
+  else { banner.textContent='DRAW'; banner.className='dual-outcome'; }
+}
+
+/* ---------- リマッチ ---------- */
+async function requestOpenRematch(){
+  state.open.rematchReady = true;
+  const btn = document.getElementById('btn-dual-rematch');
+  btn.disabled = true;
+  btn.textContent = '相手を待っています…';
+  skywaySend({ type:'rematchReady' });
+  checkOpenBothRematchReady();
+}
+
+function checkOpenBothRematchReady(){
+  if (state.open.rematchReady && state.open.opponentRematchReady){
+    if (state.open.role === 'host'){
+      openHostGenerateAndSend();
+    }
+    // guest側は host からの新しい 'board' メッセージ受信でカウントダウンが始まる
+  }
+}
+
+/* ---------- ホームへ戻る ---------- */
+function goHomeFromOpen(){
+  stopAllOpenTimers();
+  skywayLeaveRoom();
+  state.mode = 'solo';
+  state.open.code = null;
+  state.open.role = null;
+  state.open.opponentName = '';
+  state.open.opponentDisconnected = false;
+  state.open.rematchReady = false;
+  state.open.opponentRematchReady = false;
+  document.getElementById('open-hud').style.display = 'none';
+  document.getElementById('normal-hud').style.display = 'grid';
+  document.getElementById('open-turn-bar').style.display = 'none';
+  hideOpenGuessBanner();
+  const rematchBtn = document.getElementById('btn-dual-rematch');
+  rematchBtn.disabled = false;
+  rematchBtn.textContent = 'リマッチ';
+  showScreen('screen-home');
+}
+
+/* =========================================================================
+   SENTINEL MINES：非対称2ラウンド対戦フロー（SkyWay P2P通信を使用）
+   Round1: host(PlayerA)=Guardian / guest(PlayerB)=Hunter
+   Round2: 役割交代。GuardianはHunterの操作をリアルタイム観戦する。
+   ========================================================================= */
+let sentinelGuardianCellEls = [];
+let sentinelHunterCellEls = [];
+let sentinelRevealCellEls = [];
+
+function sentinelInitBoard(){
+  const rows = SENTINEL_ROWS, cols = SENTINEL_COLS;
+  state.sentinel.rows = rows; state.sentinel.cols = cols;
+  const board = [];
+  for (let r=0;r<rows;r++){
+    const row = [];
+    for (let c=0;c<cols;c++){
+      row.push({ isCore:false, isMine:false, dist:null, opened:false, exploded:false, flagged:false });
+    }
+    board.push(row);
+  }
+  state.sentinel.board = board;
+}
+function sentinelForEachCell(cb){
+  for (let r=0;r<state.sentinel.rows;r++) for (let c=0;c<state.sentinel.cols;c++) cb(r,c,state.sentinel.board[r][c]);
+}
+function sentinelInBounds(r,c){ return r>=0 && r<state.sentinel.rows && c>=0 && c<state.sentinel.cols; }
+
+function sentinelComputeDistances(){
+  const bombs = [];
+  sentinelForEachCell((r,c,cell)=>{ if (cell.isCore || cell.isMine) bombs.push([r,c]); });
+  sentinelForEachCell((r,c,cell)=>{
+    if (cell.isCore || cell.isMine){ cell.dist = 0; return; }
+    let min = Infinity;
+    for (const [br,bc] of bombs){
+      const d = chebyshev(r,c,br,bc);
+      if (d < min) min = d;
+    }
+    cell.dist = Math.min(min, SENTINEL_DISTANCE_CAP);
+  });
+}
+
+/* ---------- ロビー：部屋を作る／参加する ---------- */
+async function handleSentinelCreate(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const btn = document.getElementById('btn-sentinel-create');
+  btn.disabled = true;
+  try{
+    const code = generateDualRoomCode();
+    state.sentinel.code = code;
+    state.sentinel.role = 'host';
+    state.sentinel.myName = state.playerName;
+    state.sentinel.opponentName = '';
+    await skywayJoinRoom(sentinelRoomNameFromCode(code), 'host', 'create', {
+      onMessage: handleSentinelMessage,
+      onPeerJoined: ()=> onSentinelPeerJoined(),
+      onPeerLeft: ()=> handleSentinelOpponentDisconnected()
+    });
+    enterSentinelWaitingAsHost(code);
+  } catch(e){
+    console.error('handleSentinelCreate error:', e);
+    showToast('ルーム作成中にエラーが発生しました');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function enterSentinelWaitingAsHost(code){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-countdown-number').style.display = 'none';
+  const codeEl = document.getElementById('dual-waiting-code');
+  codeEl.style.display = 'block';
+  codeEl.textContent = code;
+  setDualWaitingStatus('このコードを相手に伝えて「参加する」を押してもらいましょう（あなたがPlayer Aです）');
+}
+
+function onSentinelPeerJoined(){
+  setDualWaitingStatus('相手が参加しました。まもなく開始します…');
+  skywaySend({ type:'hello', name: state.playerName });
+  sentinelRunCountdownThenStart();
+}
+
+async function handleSentinelJoin(){
+  if (!skywayConfigured()){
+    showToast('オンライン対戦に必要な設定(SkyWay)がありません。コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを確認してください', 4000);
+    return;
+  }
+  const input = document.getElementById('sentinel-join-code');
+  const code = input.value.trim();
+  if (!/^[0-9]{5}$/.test(code)){
+    showToast('5桁の数字コードを入力してください');
+    return;
+  }
+  const btn = document.getElementById('btn-sentinel-join');
+  btn.disabled = true;
+  try{
+    state.sentinel.code = code;
+    state.sentinel.role = 'guest';
+    state.sentinel.myName = state.playerName;
+    state.sentinel.opponentName = '';
+    await skywayJoinRoom(sentinelRoomNameFromCode(code), 'guest', 'find', {
+      onMessage: handleSentinelMessage,
+      onPeerLeft: ()=> handleSentinelOpponentDisconnected()
+    });
+    skywaySend({ type:'hello', name: state.playerName });
+    sentinelRunCountdownThenStart();
+  } catch(e){
+    console.error('handleSentinelJoin error:', e);
+    showToast('そのルームコードは見つかりませんでした');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function handleSentinelMessage(msg){
+  if (!msg || !msg.type) return;
+  switch(msg.type){
+    case 'hello':
+      state.sentinel.opponentName = msg.name || '相手';
+      break;
+    case 'sentinelBoard':
+      sentinelInitBoard();
+      msg.coreCells.forEach(([r,c])=>{ state.sentinel.board[r][c].isCore = true; });
+      msg.mineCells.forEach(([r,c])=>{ state.sentinel.board[r][c].isMine = true; });
+      state.sentinel.coreCells = msg.coreCells;
+      state.sentinel.mineCells = msg.mineCells;
+      sentinelComputeDistances();
+      sentinelEnterHunterScreen();
+      break;
+    case 'sentinelHunterState':
+      if (state.sentinel.myRoleThisRound === 'guardian'){
+        sentinelApplyCellStates(msg.cellStates);
+        state.sentinel.hunterTimeLeft = msg.timeLeft;
+        state.sentinel.openedCount = msg.openedCount;
+        sentinelRenderHunterBoard();
+        sentinelRenderHunterHUD();
+      }
+      break;
+    case 'sentinelRoundFinished':
+      sentinelApplyCellStates(msg.cellStates);
+      if (state.sentinel.myRoleThisRound === 'guardian'){
+        sentinelComputeGuardianResult(msg);
+      }
+      sentinelShowReveal(msg.flaggedCells);
+      break;
+    case 'sentinelFinalResult':
+      state.sentinel.opponentResult = { roundResults: msg.roundResults, name: msg.name };
+      sentinelTryRenderFinalResult();
+      break;
+    case 'sentinelRematchReady':
+      state.sentinel.opponentRematchReady = true;
+      sentinelCheckBothRematchReady();
+      break;
+  }
+}
+
+/* ---------- カウントダウン → 試合開始 ---------- */
+function sentinelRunCountdownThenStart(){
+  showScreen('screen-dual-waiting');
+  document.getElementById('dual-waiting-code').style.display = 'none';
+  const numberEl = document.getElementById('dual-countdown-number');
+  numberEl.style.display = 'block';
+  setDualWaitingStatus('まもなく開始');
+
+  let remain = SENTINEL_COUNTDOWN_SECONDS;
+  numberEl.textContent = String(remain);
+  const iv = setInterval(()=>{
+    remain--;
+    if (remain <= 0){
+      clearInterval(iv);
+      numberEl.textContent = 'START!';
+      setTimeout(()=> sentinelStartMatch(), 350);
+    } else {
+      numberEl.textContent = String(remain);
+    }
+  }, 1000);
+}
+
+function sentinelStartMatch(){
+  stopAllDualTimers();
+  stopAllOpenTimers();
+  state.mode = 'sentinel';
+  state.sentinel.round = 1;
+  state.sentinel.myRoleThisRound = (state.sentinel.role === 'host') ? 'guardian' : 'hunter';
+  state.sentinel.roundResults = [];
+  state.sentinel.opponentResult = null;
+  state.sentinel.opponentDisconnected = false;
+  state.sentinel.rematchReady = false;
+  state.sentinel.opponentRematchReady = false;
+
+  if (state.sentinel.myRoleThisRound === 'guardian'){
+    sentinelEnterGuardianSetup();
+  } else {
+    showScreen('screen-dual-waiting');
+    document.getElementById('dual-waiting-code').style.display = 'none';
+    document.getElementById('dual-countdown-number').style.display = 'none';
+    setDualWaitingStatus('相手がRound 1の盤面を準備しています…');
+  }
+}
+
+/* ---------- Guardianフェーズ：盤面配置 ---------- */
+function sentinelEnterGuardianSetup(){
+  state.sentinel.phase = 'guardian_setup';
+  state.sentinel.coreCells = [];
+  state.sentinel.mineCells = [];
+  state.sentinel.corePreview = null;
+  state.sentinel.guardianReady = false;
+  document.getElementById('sentinel-g-round').textContent = state.sentinel.round;
+  sentinelBuildGuardianBoardDOM();
+  sentinelRenderGuardianBoard();
+  sentinelUpdateGuardianStatus();
+  sentinelUpdateReadyButton();
+  showScreen('screen-sentinel-guardian');
+  sentinelStartGuardianTimer();
+}
+
+function sentinelBuildGuardianBoardDOM(){
+  const boardEl = document.getElementById('sentinel-guardian-board');
+  boardEl.style.gridTemplateColumns = `repeat(${state.sentinel.cols}, 1fr)`;
+  boardEl.innerHTML = '';
+  sentinelGuardianCellEls = [];
+  for (let r=0;r<state.sentinel.rows;r++){
+    const rowEls = [];
+    for (let c=0;c<state.sentinel.cols;c++){
+      const el = document.createElement('div');
+      el.className = 'cell closed';
+      el.addEventListener('click', ()=> sentinelHandleGuardianClick(r,c));
+      boardEl.appendChild(el);
+      rowEls.push(el);
+    }
+    sentinelGuardianCellEls.push(rowEls);
+  }
+}
+
+function sentinelCoreFits(r,c){
+  return sentinelInBounds(r,c) && sentinelInBounds(r+1,c+1);
+}
+function sentinelCoreCellsFor(r,c){
+  return [[r,c],[r,c+1],[r+1,c],[r+1,c+1]];
+}
+
+function sentinelHandleGuardianClick(r,c){
+  if (state.sentinel.guardianReady) return;
+
+  if (state.sentinel.coreCells.length === 0){
+    if (state.sentinel.corePreview && state.sentinel.corePreview.r===r && state.sentinel.corePreview.c===c){
+      if (sentinelCoreFits(r,c)){
+        state.sentinel.coreCells = sentinelCoreCellsFor(r,c);
+        state.sentinel.corePreview = null;
+        sentinelRenderGuardianBoard();
+        sentinelUpdateGuardianStatus();
+        sentinelUpdateReadyButton();
+      }
+      return;
+    }
+    if (!sentinelCoreFits(r,c)){
+      showToast('その位置にはCore Mineを置けません(盤面からはみ出します)');
+      return;
+    }
+    state.sentinel.corePreview = {r,c};
+    sentinelRenderGuardianBoard();
+    return;
+  }
+
+  const isCoreCell = state.sentinel.coreCells.some(([cr,cc])=> cr===r && cc===c);
+  if (isCoreCell) return;
+  const idx = state.sentinel.mineCells.findIndex(([mr,mc])=> mr===r && mc===c);
+  if (idx >= 0){
+    state.sentinel.mineCells.splice(idx,1);
+  } else {
+    if (state.sentinel.mineCells.length >= SENTINEL_MAX_MINES){
+      showToast(`Mineは最大${SENTINEL_MAX_MINES}個までです`);
+      return;
+    }
+    state.sentinel.mineCells.push([r,c]);
+  }
+  sentinelRenderGuardianBoard();
+  sentinelUpdateGuardianStatus();
+  sentinelUpdateReadyButton();
+}
+
+function sentinelRenderGuardianBoard(){
+  for (let r=0;r<state.sentinel.rows;r++){
+    for (let c=0;c<state.sentinel.cols;c++){
+      const el = sentinelGuardianCellEls[r][c];
+      el.className = 'cell closed';
+      const isCoreConfirmed = state.sentinel.coreCells.some(([cr,cc])=>cr===r&&cc===c);
+      const preview = state.sentinel.corePreview;
+      const isCorePreview = preview && sentinelCoreFits(preview.r, preview.c) &&
+        sentinelCoreCellsFor(preview.r, preview.c).some(([pr,pc])=>pr===r&&pc===c);
+      const isMine = state.sentinel.mineCells.some(([mr,mc])=>mr===r&&mc===c);
+      if (isCoreConfirmed) el.classList.add('sentinel-core-placed');
+      else if (isCorePreview) el.classList.add('sentinel-core-preview');
+      else if (isMine) el.classList.add('sentinel-mine-placed');
+    }
+  }
+}
+
+function sentinelUpdateGuardianStatus(){
+  const el = document.getElementById('sentinel-g-status');
+  if (state.sentinel.coreCells.length === 0){
+    el.textContent = state.sentinel.corePreview
+      ? 'もう一度同じマスをタップしてCore Mineを確定'
+      : 'Core Mine（2×2）を配置するマスをタップしてください';
+  } else {
+    el.textContent = `Mineを配置してください（現在${state.sentinel.mineCells.length}個 / 最大${SENTINEL_MAX_MINES}個・最低1個必要）`;
+  }
+}
+function sentinelUpdateReadyButton(){
+  const btn = document.getElementById('btn-sentinel-ready');
+  btn.disabled = !(state.sentinel.coreCells.length>0 && state.sentinel.mineCells.length>=1);
+}
+
+function sentinelClearGuardianSetup(){
+  if (state.sentinel.guardianReady) return;
+  state.sentinel.corePreview = null;
+  state.sentinel.coreCells = [];
+  state.sentinel.mineCells = [];
+  sentinelRenderGuardianBoard();
+  sentinelUpdateGuardianStatus();
+  sentinelUpdateReadyButton();
+}
+
+function sentinelStartGuardianTimer(){
+  state.sentinel.guardianTimeLeft = SENTINEL_GUARDIAN_TIME;
+  sentinelRenderGuardianTimer();
+  state.sentinel.guardianTimerId = setInterval(()=>{
+    state.sentinel.guardianTimeLeft--;
+    sentinelRenderGuardianTimer();
+    if (state.sentinel.guardianTimeLeft <= 0){
+      sentinelStopGuardianTimer();
+      sentinelConfirmGuardianReady();
+    }
+  }, 1000);
+}
+function sentinelStopGuardianTimer(){
+  if (state.sentinel.guardianTimerId){ clearInterval(state.sentinel.guardianTimerId); state.sentinel.guardianTimerId = null; }
+}
+function sentinelRenderGuardianTimer(){
+  const el = document.getElementById('sentinel-g-timer');
+  el.textContent = state.sentinel.guardianTimeLeft;
+  el.classList.toggle('low', state.sentinel.guardianTimeLeft <= 10);
+}
+
+function sentinelConfirmGuardianReady(){
+  if (state.sentinel.guardianReady) return;
+  sentinelStopGuardianTimer();
+  if (state.sentinel.coreCells.length === 0){
+    sentinelAutoPlaceCoreFallback();
+  }
+  if (state.sentinel.mineCells.length === 0){
+    sentinelAutoPlaceOneMineFallback();
+  }
+  state.sentinel.guardianReady = true;
+  sentinelFinalizeGuardianBoard();
+}
+
+function sentinelAutoPlaceCoreFallback(){
+  const candidates = [];
+  for (let r=0; r<=state.sentinel.rows-2; r++){
+    for (let c=0; c<=state.sentinel.cols-2; c++){
+      candidates.push([r,c]);
+    }
+  }
+  const [r,c] = candidates[Math.floor(Math.random()*candidates.length)];
+  state.sentinel.coreCells = sentinelCoreCellsFor(r,c);
+}
+function sentinelAutoPlaceOneMineFallback(){
+  const candidates = [];
+  for (let r=0;r<state.sentinel.rows;r++){
+    for (let c=0;c<state.sentinel.cols;c++){
+      const inCore = state.sentinel.coreCells.some(([cr,cc])=>cr===r&&cc===c);
+      if (!inCore) candidates.push([r,c]);
+    }
+  }
+  const pick = candidates[Math.floor(Math.random()*candidates.length)];
+  state.sentinel.mineCells.push(pick);
+}
+
+function sentinelFinalizeGuardianBoard(){
+  sentinelInitBoard();
+  state.sentinel.coreCells.forEach(([r,c])=>{ state.sentinel.board[r][c].isCore = true; });
+  state.sentinel.mineCells.forEach(([r,c])=>{ state.sentinel.board[r][c].isMine = true; });
+  sentinelComputeDistances();
+
+  skywaySend({ type:'sentinelBoard', coreCells: state.sentinel.coreCells, mineCells: state.sentinel.mineCells });
+
+  sentinelEnterHunterScreen();
+}
+
+/* ---------- Hunterフェーズ：プレイ／観戦 ---------- */
+function sentinelEnterHunterScreen(){
+  const amHunter = state.sentinel.myRoleThisRound === 'hunter';
+  state.sentinel.phase = 'hunter_playing';
+  state.sentinel.openedCount = 0;
+  state.sentinel.explodedCells = [];
+  state.sentinel.hintUsed = false;
+  state.sentinel.flagCount = 0;
+  state.sentinel.myResult = null;
+  state.sentinel.radarScanActive = false;
+  state.sentinel.radarScanPeekedCells = [];
+
+  sentinelBuildHunterBoardDOM();
+  sentinelRenderHunterBoard();
+
+  const roleBanner = document.getElementById('sentinel-h-role-banner');
+  const hintPanel = document.getElementById('sentinel-hint-panel');
+  const spectateNote = document.getElementById('sentinel-spectate-note');
+  const guessActionsNormal = document.getElementById('sentinel-guess-actions-normal');
+  const guessActionsMode = document.getElementById('sentinel-guess-actions-mode');
+  document.getElementById('sentinel-radar-banner').style.display = 'none';
+
+  if (amHunter){
+    roleBanner.className = 'sentinel-role-banner hunter';
+    roleBanner.textContent = `🎯 あなたはHunter（Round ${state.sentinel.round}）`;
+    hintPanel.style.display = 'flex';
+    ['btn-hint-radar','btn-hint-border','btn-hint-safe','btn-hint-signal'].forEach(id=>{
+      document.getElementById(id).disabled = false;
+    });
+    spectateNote.style.display = 'none';
+    guessActionsNormal.style.display = 'flex';
+    guessActionsMode.style.display = 'none';
+    state.sentinel.hunterTimeLeft = SENTINEL_HUNTER_TIME;
+    sentinelRenderHunterHUD();
+    sentinelStartHunterTimer();
+  } else {
+    roleBanner.className = 'sentinel-role-banner spectate';
+    roleBanner.textContent = `👁️ Guardianとして観戦中（Round ${state.sentinel.round}）`;
+    hintPanel.style.display = 'none';
+    spectateNote.style.display = 'block';
+    guessActionsNormal.style.display = 'none';
+    guessActionsMode.style.display = 'none';
+    state.sentinel.hunterTimeLeft = SENTINEL_HUNTER_TIME;
+    sentinelRenderHunterHUD();
+  }
+
+  showScreen('screen-sentinel-hunter');
+}
+
+function sentinelBuildHunterBoardDOM(){
+  const boardEl = document.getElementById('sentinel-hunter-board');
+  boardEl.style.gridTemplateColumns = `repeat(${state.sentinel.cols}, 1fr)`;
+  boardEl.innerHTML = '';
+  sentinelHunterCellEls = [];
+  for (let r=0;r<state.sentinel.rows;r++){
+    const rowEls = [];
+    for (let c=0;c<state.sentinel.cols;c++){
+      const el = document.createElement('div');
+      el.className = 'cell closed';
+      el.addEventListener('click', ()=> sentinelHandleHunterClick(r,c));
+      boardEl.appendChild(el);
+      rowEls.push(el);
+    }
+    sentinelHunterCellEls.push(rowEls);
+  }
+}
+
+function sentinelRenderHunterBoard(){
+  const isGuessing = state.sentinel.phase === 'guessing';
+  for (let r=0;r<state.sentinel.rows;r++){
+    for (let c=0;c<state.sentinel.cols;c++){
+      const cell = state.sentinel.board[r][c];
+      const el = sentinelHunterCellEls[r][c];
+      el.className = 'cell';
+      el.textContent = '';
+      if (cell.exploded){
+        el.classList.add('bomb','exploded');
+        continue;
+      }
+      if (cell.opened){
+        el.classList.add('opened');
+        const span = document.createElement('span');
+        span.className = 'd' + Math.min(cell.dist, 6);
+        span.textContent = cell.dist;
+        el.appendChild(span);
+        if (cell.dist >= SENTINEL_AUTO_REVEAL_DIST) el.classList.add('dist6-cell');
+        continue;
+      }
+      el.classList.add('closed');
+      if (cell.flagged) el.classList.add('flagged');
+      else if (isGuessing) el.classList.add('guessable');
+      if (state.sentinel.radarScanPeekedCells.some(([pr,pc])=>pr===r&&pc===c)){
+        el.classList.add('sentinel-radar-peek');
+      }
+    }
+  }
+}
+
+function sentinelRenderHunterHUD(){
+  const timeEl = document.getElementById('sentinel-h-time');
+  const timeBox = document.getElementById('sentinel-h-time-box');
+  const openedEl = document.getElementById('sentinel-h-opened');
+  if (timeEl) timeEl.textContent = state.sentinel.hunterTimeLeft;
+  if (timeBox) timeBox.classList.toggle('low', state.sentinel.hunterTimeLeft <= 30);
+  if (openedEl) openedEl.textContent = state.sentinel.openedCount;
+}
+
+function sentinelHandleHunterClick(r,c){
+  if (state.sentinel.myRoleThisRound !== 'hunter') return;
+  if (state.sentinel.radarScanActive){
+    sentinelRadarScanClick(r,c);
+    return;
+  }
+  if (state.sentinel.phase === 'guessing'){
+    sentinelToggleFlag(r,c);
+    return;
+  }
+  if (state.sentinel.phase !== 'hunter_playing') return;
+  sentinelOpenCell(r,c,true);
+}
+
+function sentinelOpenCell(r,c,sendUpdate){
+  const cell = state.sentinel.board[r][c];
+  if (cell.opened || cell.exploded) return;
+  if (cell.isMine || cell.isCore){
+    cell.exploded = true;
+    state.sentinel.explodedCells.push({r,c,isCore:cell.isCore});
+  } else {
+    cell.opened = true;
+    state.sentinel.openedCount++;
+    if (cell.dist >= SENTINEL_AUTO_REVEAL_DIST){
+      sentinelAutoRevealCluster(r,c);
+    }
+  }
+  sentinelRenderHunterBoard();
+  sentinelRenderHunterHUD();
+  if (sendUpdate) sentinelSendHunterState();
+}
+
+function sentinelAutoRevealCluster(centerR, centerC, trackArray){
+  for (let dr=-2; dr<=2; dr++){
+    for (let dc=-2; dc<=2; dc++){
+      const r = centerR+dr, c = centerC+dc;
+      if (dr===0 && dc===0) continue;
+      if (!sentinelInBounds(r,c)) continue;
+      const cell = state.sentinel.board[r][c];
+      if (cell.isCore || cell.isMine) continue;
+      if (cell.opened) continue;
+      if (cell.dist >= SENTINEL_AUTO_REVEAL_DIST){
+        cell.opened = true;
+        state.sentinel.openedCount++;
+        if (trackArray) trackArray.push([r,c]);
+      }
+    }
+  }
+}
+
+function sentinelSerializeCellStates(){
+  const arr = new Array(state.sentinel.rows*state.sentinel.cols).fill(0);
+  sentinelForEachCell((r,c,cell)=>{
+    const idx = r*state.sentinel.cols + c;
+    if (cell.exploded) arr[idx] = cell.isCore ? 3 : 2;
+    else if (cell.opened) arr[idx] = 1;
+  });
+  return arr;
+}
+function sentinelApplyCellStates(cellStates){
+  sentinelForEachCell((r,c,cell)=>{
+    const idx = r*state.sentinel.cols + c;
+    const v = cellStates[idx];
+    cell.opened = (v===1);
+    cell.exploded = (v===2 || v===3);
+  });
+}
+function sentinelSendHunterState(){
+  skywaySend({ type:'sentinelHunterState', cellStates: sentinelSerializeCellStates(), timeLeft: state.sentinel.hunterTimeLeft, openedCount: state.sentinel.openedCount });
+}
+
+function sentinelStartHunterTimer(){
+  sentinelStopHunterTimer();
+  state.sentinel.hunterTimerId = setInterval(()=>{
+    state.sentinel.hunterTimeLeft--;
+    if (state.sentinel.hunterTimeLeft <= 0){
+      state.sentinel.hunterTimeLeft = 0;
+      sentinelRenderHunterHUD();
+      sentinelSendHunterState();
+      sentinelTimeUp();
+      return;
+    }
+    sentinelRenderHunterHUD();
+    if (state.sentinel.hunterTimeLeft % 3 === 0) sentinelSendHunterState();
+  }, 1000);
+}
+function sentinelStopHunterTimer(){
+  if (state.sentinel.hunterTimerId){ clearInterval(state.sentinel.hunterTimerId); state.sentinel.hunterTimerId = null; }
+}
+function sentinelTimeUp(){
+  if (state.sentinel.phase === 'reveal' || state.sentinel.phase === 'result') return;
+  state.sentinel.phase = 'guessing';
+  sentinelFinalizeGuess();
+}
+
+/* ---------- GUESS ---------- */
+function sentinelEnterGuessMode(){
+  if (state.sentinel.myRoleThisRound !== 'hunter') return;
+  if (state.sentinel.phase !== 'hunter_playing') return;
+  if (state.sentinel.radarScanActive) return;
+  state.sentinel.phase = 'guessing';
+  sentinelStopHunterTimer();
+  sentinelRenderHunterBoard();
+  sentinelRenderModeUI();
+  sentinelSendHunterState();
+}
+function sentinelToggleFlag(r,c){
+  if (state.sentinel.phase !== 'guessing') return;
+  const cell = state.sentinel.board[r][c];
+  if (cell.opened || cell.exploded) return;
+  if (cell.flagged){
+    cell.flagged = false;
+    state.sentinel.flagCount--;
+  } else {
+    if (state.sentinel.flagCount >= SENTINEL_MAX_GUESS){
+      showToast('これ以上GUESSできません（残り0）');
+      return;
+    }
+    cell.flagged = true;
+    state.sentinel.flagCount++;
+  }
+  sentinelRenderHunterBoard();
+  sentinelRenderModeUI();
+}
+function sentinelRenderModeUI(){
+  const banner = document.getElementById('sentinel-guess-banner');
+  const isGuessing = state.sentinel.phase === 'guessing';
+  banner.classList.toggle('show', isGuessing);
+  document.getElementById('sentinel-guess-actions-normal').style.display = isGuessing ? 'none' : 'flex';
+  document.getElementById('sentinel-guess-actions-mode').style.display = isGuessing ? 'flex' : 'none';
+}
+function sentinelConfirmGuess(){
+  if (state.sentinel.phase !== 'guessing') return;
+  sentinelFinalizeGuess();
+}
+
+function sentinelFinalizeGuess(){
+  sentinelStopHunterTimer();
+
+  const totalMines = state.sentinel.mineCells.length;
+  const pointsPerMine = SENTINEL_MINE_POINTS[totalMines] || 0;
+  const mineStepValue = Math.floor(pointsPerMine / 2);
+  const coreStepValue = Math.floor(SENTINEL_CORE_POINTS / 2);
+
+  let mineGuessSuccess = 0, mineGuessFail = 0, coreGuessSuccess = false;
+  sentinelForEachCell((r,c,cell)=>{
+    if (!cell.flagged) return;
+    if (cell.isCore) coreGuessSuccess = true;
+    else if (cell.isMine) mineGuessSuccess++;
+    else mineGuessFail++;
+  });
+
+  const steppedMineKeys = new Set();
+  let steppedCore = false;
+  state.sentinel.explodedCells.forEach(({r,c,isCore})=>{
+    if (isCore) steppedCore = true;
+    else steppedMineKeys.add(r+','+c);
+  });
+
+  // ① MineをGUESS成功：価値をそのまま獲得 / ③ Mineを踏む：価値の50%を減点
+  const mineGuessScore = mineGuessSuccess * pointsPerMine;
+  const mineStepPenalty = steppedMineKeys.size * -mineStepValue;
+  // ① Core MineをGUESS成功：+600 / ④ Core Mineを踏む：-300(600の50%)
+  const coreGuessScore = coreGuessSuccess ? SENTINEL_CORE_POINTS : 0;
+  const coreStepPenalty = steppedCore ? -coreStepValue : 0;
+
+  const guessFailPenalty = mineGuessFail * -150;
+
+  let unopenedCount = 0;
+  sentinelForEachCell((r,c,cell)=>{ if (!cell.opened && !cell.exploded) unopenedCount++; });
+  const unopenedScore = unopenedCount * SENTINEL_OPEN_BONUS;
+
+  // フルオープンボーナス：一度も踏まずCore Mine・Mineすべてを正しくGUESSできた場合のみ
+  const noExplosions = (steppedMineKeys.size === 0 && !steppedCore);
+  const fullOpenBonus = (noExplosions && mineGuessSuccess === totalMines && coreGuessSuccess) ? SENTINEL_FULL_OPEN_BONUS : 0;
+  const timeBonus = state.sentinel.hunterTimeLeft;
+
+  const hunterScore = mineGuessScore + mineStepPenalty + coreGuessScore + coreStepPenalty + guessFailPenalty + unopenedScore + fullOpenBonus + timeBonus;
+
+  const hunterBreakdown = {
+    role: 'hunter',
+    totalMines, pointsPerMine, mineStepValue,
+    mineGuessSuccess, mineGuessScore,
+    mineStepCount: steppedMineKeys.size, mineStepPenalty,
+    coreGuessSuccess, coreGuessScore,
+    coreStepped: steppedCore, coreStepPenalty,
+    guessFail: mineGuessFail, guessFailPenalty,
+    unopenedCount, unopenedScore,
+    fullOpenBonus,
+    timeLeft: state.sentinel.hunterTimeLeft, timeBonus,
+    score: hunterScore
+  };
+
+  state.sentinel.myResult = hunterBreakdown;
+  state.sentinel.phase = 'reveal';
+
+  const flaggedList = [];
+  sentinelForEachCell((r,c,cell)=>{ if (cell.flagged) flaggedList.push([r,c]); });
+
+  skywaySend({
+    type: 'sentinelRoundFinished',
+    cellStates: sentinelSerializeCellStates(),
+    flaggedCells: flaggedList,
+    hunterResult: hunterBreakdown
+  });
+
+  sentinelShowReveal(flaggedList);
+}
+
+function sentinelComputeGuardianResult(hunterMsg){
+  const hb = hunterMsg.hunterResult;
+  const totalMines = hb.totalMines;
+  const pointsPerMine = hb.pointsPerMine;
+  const mineStepValue = hb.mineStepValue;
+  const coreStepValue = Math.floor(SENTINEL_CORE_POINTS / 2);
+
+  // ② Mineを守り切る：GUESSもされず踏まれもしなかった数だけ、価値をそのまま獲得
+  const minesProtected = totalMines - hb.mineGuessSuccess - hb.mineStepCount;
+  const mineProtectScore = minesProtected * pointsPerMine;
+  // ③ HunterがMineを踏む：踏まれたMineの価値の50%を獲得
+  const mineStepBonus = hb.mineStepCount * mineStepValue;
+
+  // ① Core Mineを守り切る：GUESSもされず踏まれもしなかった場合のみ+600
+  const coreProtected = !hb.coreGuessSuccess && !hb.coreStepped;
+  const coreProtectScore = coreProtected ? SENTINEL_CORE_POINTS : 0;
+  // ④ HunterがCore Mineを踏む：600の50% = +300
+  const coreStepBonus = hb.coreStepped ? coreStepValue : 0;
+
+  // ⑤ Hunterが開けたマス：+5点/マス
+  const totalSafe = state.sentinel.rows*state.sentinel.cols - totalMines - state.sentinel.coreCells.length;
+  const openedByHunter = totalSafe - hb.unopenedCount;
+  const openedBonus = openedByHunter * SENTINEL_OPEN_BONUS;
+
+  // ⑥ 時間ボーナス：経過時間(360-Hunter残り時間)をそのまま加算
+  const timeBonus = SENTINEL_HUNTER_TIME - hb.timeLeft;
+
+  const guardianScore = mineProtectScore + mineStepBonus + coreProtectScore + coreStepBonus + openedBonus + timeBonus;
+
+  state.sentinel.myResult = {
+    role: 'guardian',
+    totalMines, pointsPerMine, mineStepValue,
+    minesProtected, mineProtectScore,
+    mineStepCount: hb.mineStepCount, mineStepBonus,
+    coreProtected, coreProtectScore,
+    coreStepped: hb.coreStepped, coreStepBonus,
+    openedByHunter, openedBonus,
+    timeLeft: hb.timeLeft, timeBonus,
+    score: guardianScore
+  };
+}
+
+/* ---------- ヒントカード ---------- */
+function sentinelCanUseHint(){
+  return state.sentinel.myRoleThisRound === 'hunter' && !state.sentinel.hintUsed && state.sentinel.phase === 'hunter_playing';
+}
+function sentinelDisableHintPanel(){
+  ['btn-hint-radar','btn-hint-border','btn-hint-safe','btn-hint-signal'].forEach(id=>{
+    document.getElementById(id).disabled = true;
+  });
+}
+
+function sentinelUseHintRadar(){
+  if (!sentinelCanUseHint()) return;
+  state.sentinel.hintUsed = true;
+  sentinelDisableHintPanel();
+
+  const limit = 3 + Math.floor(Math.random()*3);
+  state.sentinel.radarScanActive = true;
+  state.sentinel.radarScanLimit = limit;
+  state.sentinel.radarScanOpened = 0;
+  state.sentinel.radarScanPeekedCells = [];
+
+  const banner = document.getElementById('sentinel-radar-banner');
+  banner.style.display = 'block';
+  sentinelUpdateRadarBanner();
+
+  const startedAt = Date.now();
+  state.sentinel.radarScanTimerId = setInterval(()=>{
+    const remain = Math.max(0, SENTINEL_RADAR_SCAN_MS - (Date.now()-startedAt));
+    state.sentinel.radarScanTimeLeft = remain;
+    sentinelUpdateRadarBanner();
+    if (remain <= 0) sentinelEndRadarScan();
+  }, 200);
+
+  sentinelSendHunterState();
+}
+function sentinelUpdateRadarBanner(){
+  const banner = document.getElementById('sentinel-radar-banner');
+  const sec = Math.ceil((state.sentinel.radarScanTimeLeft||0)/1000);
+  banner.textContent = `📡 Radar Scan中 ― 残り${sec}秒 / あと${state.sentinel.radarScanLimit - state.sentinel.radarScanOpened}マス覗けます`;
+}
+function sentinelRadarScanClick(r,c){
+  const cell = state.sentinel.board[r][c];
+  if (cell.opened || cell.exploded) return;
+  if (state.sentinel.radarScanOpened >= state.sentinel.radarScanLimit) return;
+
+  if (cell.isMine || cell.isCore){
+    cell.exploded = true;
+    state.sentinel.explodedCells.push({r,c,isCore:cell.isCore});
+    state.sentinel.radarScanOpened++;
+  } else {
+    cell.opened = true;
+    state.sentinel.openedCount++;
+    state.sentinel.radarScanPeekedCells.push([r,c]);
+    state.sentinel.radarScanOpened++;
+    if (cell.dist >= SENTINEL_AUTO_REVEAL_DIST){
+      sentinelAutoRevealCluster(r,c, state.sentinel.radarScanPeekedCells);
+    }
+  }
+  sentinelRenderHunterBoard();
+  sentinelRenderHunterHUD();
+  sentinelUpdateRadarBanner();
+  sentinelSendHunterState();
+
+  if (state.sentinel.radarScanOpened >= state.sentinel.radarScanLimit){
+    sentinelEndRadarScan();
+  }
+}
+function sentinelEndRadarScan(){
+  if (!state.sentinel.radarScanActive) return;
+  state.sentinel.radarScanActive = false;
+  if (state.sentinel.radarScanTimerId){ clearInterval(state.sentinel.radarScanTimerId); state.sentinel.radarScanTimerId = null; }
+  document.getElementById('sentinel-radar-banner').style.display = 'none';
+
+  state.sentinel.radarScanPeekedCells.forEach(([r,c])=>{
+    const cell = state.sentinel.board[r][c];
+    if (cell.opened){
+      cell.opened = false;
+      state.sentinel.openedCount--;
+    }
+  });
+  state.sentinel.radarScanPeekedCells = [];
+  sentinelRenderHunterBoard();
+  sentinelRenderHunterHUD();
+  sentinelSendHunterState();
+}
+
+function sentinelUseHintBorder(){
+  if (!sentinelCanUseHint()) return;
+  state.sentinel.hintUsed = true;
+  sentinelDisableHintPanel();
+
+  let count = 0;
+  const rows = state.sentinel.rows, cols = state.sentinel.cols;
+  state.sentinel.mineCells.forEach(([r,c])=>{
+    if (r===0 || r===rows-1 || c===0 || c===cols-1) count++;
+  });
+  const coreTouchesBorder = state.sentinel.coreCells.some(([r,c])=> r===0||r===rows-1||c===0||c===cols-1);
+  if (coreTouchesBorder) count++;
+
+  showToast(`🧭 Border Intel：外周にあるMineは ${count} 個`, 5000);
+  sentinelSendHunterState();
+}
+
+function sentinelUseHintSafe(){
+  if (!sentinelCanUseHint()) return;
+  state.sentinel.hintUsed = true;
+  sentinelDisableHintPanel();
+
+  const candidates = [];
+  sentinelForEachCell((r,c,cell)=>{
+    if (!cell.isCore && !cell.isMine && !cell.opened && !cell.exploded) candidates.push([r,c]);
+  });
+  shuffle(candidates);
+  const picks = candidates.slice(0, 4);
+  picks.forEach(([r,c])=>{ sentinelOpenCell(r,c,false); });
+  sentinelSendHunterState();
+  showToast(`🟢 Safe Revealで${picks.length}マス開放しました`);
+}
+
+function sentinelUseHintSignal(){
+  if (!sentinelCanUseHint()) return;
+  state.sentinel.hintUsed = true;
+  sentinelDisableHintPanel();
+
+  let maxDist = -1;
+  let candidates = [];
+  sentinelForEachCell((r,c,cell)=>{
+    if (cell.isCore || cell.isMine || cell.opened || cell.exploded) return;
+    let minDistToCore = Infinity;
+    state.sentinel.coreCells.forEach(([cr,cc])=>{
+      const d = chebyshev(r,c,cr,cc);
+      if (d < minDistToCore) minDistToCore = d;
+    });
+    if (minDistToCore > maxDist){ maxDist = minDistToCore; candidates = [[r,c]]; }
+    else if (minDistToCore === maxDist){ candidates.push([r,c]); }
+  });
+  if (candidates.length > 0){
+    const [r,c] = candidates[Math.floor(Math.random()*candidates.length)];
+    sentinelOpenCell(r,c,false);
+    sentinelSendHunterState();
+    showToast('📶 Signal Boostでマスを1つ開放しました');
+  }
+}
+
+/* ---------- ラウンド発表（reveal） ---------- */
+function sentinelShowReveal(flaggedCellsParam){
+  const flaggedCells = flaggedCellsParam || (function(){
+    const list = [];
+    sentinelForEachCell((r,c,cell)=>{ if (cell.flagged) list.push([r,c]); });
+    return list;
+  })();
+
+  document.getElementById('sentinel-reveal-title').textContent = `Round ${state.sentinel.round} 結果発表`;
+  document.getElementById('sentinel-reveal-status').textContent = state.sentinel.round === 1
+    ? 'Hunterの盤面を公開しています…（スコアは次ラウンド後に発表されます）'
+    : 'Hunterの盤面を公開しています…';
+
+  sentinelBuildRevealBoardDOM();
+  sentinelRenderRevealBoard(flaggedCells);
+
+  const nextBtn = document.getElementById('btn-sentinel-reveal-next');
+  nextBtn.textContent = state.sentinel.round === 1 ? 'Round 2へ' : '結果を見る';
+  nextBtn.disabled = true;
+  nextBtn.onclick = sentinelRevealNext;
+  showScreen('screen-sentinel-reveal');
+
+  setTimeout(()=>{ nextBtn.disabled = false; }, 1200);
+}
+
+function sentinelBuildRevealBoardDOM(){
+  const boardEl = document.getElementById('sentinel-reveal-board');
+  boardEl.style.gridTemplateColumns = `repeat(${state.sentinel.cols}, 1fr)`;
+  boardEl.innerHTML = '';
+  sentinelRevealCellEls = [];
+  for (let r=0;r<state.sentinel.rows;r++){
+    const rowEls = [];
+    for (let c=0;c<state.sentinel.cols;c++){
+      const el = document.createElement('div');
+      el.className = 'cell';
+      boardEl.appendChild(el);
+      rowEls.push(el);
+    }
+    sentinelRevealCellEls.push(rowEls);
+  }
+}
+function sentinelRenderRevealBoard(flaggedCells){
+  const flaggedSet = new Set(flaggedCells.map(([r,c])=> r+','+c));
+  for (let r=0;r<state.sentinel.rows;r++){
+    for (let c=0;c<state.sentinel.cols;c++){
+      const cell = state.sentinel.board[r][c];
+      const el = sentinelRevealCellEls[r][c];
+      el.className = 'cell';
+      el.textContent = '';
+      const flagged = flaggedSet.has(r+','+c);
+      if (cell.isCore || cell.isMine){
+        el.classList.add('bomb');
+        if (cell.exploded) el.classList.add('exploded');
+        if (flagged) el.classList.add('bomb-marker-correct');
+      } else if (flagged){
+        el.classList.add('opened','bomb-marker-wrong');
+      } else if (cell.opened){
+        el.classList.add('opened');
+        const span = document.createElement('span');
+        span.className = 'd' + Math.min(cell.dist,6);
+        span.textContent = cell.dist;
+        el.appendChild(span);
+      } else {
+        el.classList.add('closed');
+      }
+    }
+  }
+}
+
+function sentinelRevealNext(){
+  if (state.sentinel.round === 1){
+    sentinelStartRound2();
+  } else {
+    sentinelShowFinalResult();
+  }
+}
+
+function sentinelRecordRoundResult(){
+  state.sentinel.roundResults.push({ round: state.sentinel.round, myResult: state.sentinel.myResult });
+}
+
+function sentinelStartRound2(){
+  sentinelRecordRoundResult();
+
+  state.sentinel.round = 2;
+  state.sentinel.myRoleThisRound = (state.sentinel.myRoleThisRound === 'guardian') ? 'hunter' : 'guardian';
+  state.sentinel.coreCells = [];
+  state.sentinel.mineCells = [];
+  state.sentinel.corePreview = null;
+  state.sentinel.guardianReady = false;
+  state.sentinel.myResult = null;
+
+  if (state.sentinel.myRoleThisRound === 'guardian'){
+    sentinelEnterGuardianSetup();
+  } else {
+    showScreen('screen-dual-waiting');
+    document.getElementById('dual-waiting-code').style.display = 'none';
+    document.getElementById('dual-countdown-number').style.display = 'none';
+    setDualWaitingStatus('相手がRound 2の盤面を準備しています…');
+  }
+}
+
+/* ---------- 最終結果 ---------- */
+function sentinelShowFinalResult(){
+  sentinelRecordRoundResult();
+  skywaySend({ type:'sentinelFinalResult', roundResults: state.sentinel.roundResults, name: state.playerName });
+  state.sentinel.phase = 'result';
+  sentinelTryRenderFinalResult();
+}
+
+function sentinelTryRenderFinalResult(){
+  showScreen('screen-sentinel-result');
+  document.getElementById('sentinel-outcome-banner').textContent = '対戦結果を集計しています…';
+  document.getElementById('sentinel-outcome-banner').className = 'dual-outcome';
+  if (state.sentinel.roundResults.length < 2) return;
+  if (state.sentinel.opponentDisconnected) return;
+  if (!state.sentinel.opponentResult) return;
+  sentinelRenderFinalResultBoth();
+}
+
+function sentinelRenderFinalResultBoth(){
+  const oppRounds = state.sentinel.opponentResult.roundResults;
+  const oppName = state.sentinel.opponentResult.name || state.sentinel.opponentName || '相手';
+
+  let myTotal = 0, oppTotal = 0;
+  [1,2].forEach(roundNum=>{
+    const mineEntry = state.sentinel.roundResults.find(r=>r.round===roundNum);
+    const oppEntry = oppRounds.find(r=>r.round===roundNum);
+    if (!mineEntry || !oppEntry) return;
+    const mine = mineEntry.myResult, opp = oppEntry.myResult;
+    myTotal += mine.score;
+    oppTotal += opp.score;
+    const guardianEntry = mine.role === 'guardian' ? {name: state.playerName, b: mine} : {name: oppName, b: opp};
+    const hunterEntry = mine.role === 'hunter' ? {name: state.playerName, b: mine} : {name: oppName, b: opp};
+    sentinelRenderRoundTable(roundNum, guardianEntry, hunterEntry);
+  });
+
+  document.getElementById('sentinel-total-my-label').textContent = `${state.playerName}（合計）`;
+  document.getElementById('sentinel-total-my-score').textContent = myTotal;
+  document.getElementById('sentinel-total-opp-label').textContent = `${oppName}（合計）`;
+  document.getElementById('sentinel-total-opp-score').textContent = oppTotal;
+
+  const banner = document.getElementById('sentinel-outcome-banner');
+  if (myTotal !== oppTotal){
+    const win = myTotal > oppTotal;
+    banner.textContent = win ? '🏆 WIN' : 'LOSE';
+    banner.className = 'dual-outcome ' + (win?'win':'lose');
+  } else {
+    banner.textContent = 'DRAW';
+    banner.className = 'dual-outcome';
+  }
+}
+
+function sentinelRenderRoundTable(roundNum, guardianEntry, hunterEntry){
+  const el = document.getElementById(`sentinel-round${roundNum}-table`);
+  const gb = guardianEntry.b, hb = hunterEntry.b;
+  el.innerHTML = `
+    <div class="sentinel-score-row"><span class="k">🛡️ Guardian：${escapeHTML(guardianEntry.name)}</span><span class="v">${gb.score}点</span></div>
+    <div class="sentinel-score-row"><span class="k">　Mine守り切り ${gb.minesProtected}/${gb.totalMines}個（1個${gb.pointsPerMine}点）</span><span class="v">+${gb.mineProtectScore}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Hunterに踏まれたMine ${gb.mineStepCount}個（50%獲得）</span><span class="v">+${gb.mineStepBonus}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Core Mine守り切り ${gb.coreProtected?'成功':'失敗'}</span><span class="v">+${gb.coreProtectScore}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Core Mineを踏まれた（50%獲得）</span><span class="v">+${gb.coreStepBonus}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Hunterが開けたマス ${gb.openedByHunter}</span><span class="v">+${gb.openedBonus}</span></div>
+    <div class="sentinel-score-row"><span class="k">　経過時間ボーナス</span><span class="v">+${gb.timeBonus}</span></div>
+    <div class="sentinel-score-row"><span class="k">🎯 Hunter：${escapeHTML(hunterEntry.name)}</span><span class="v">${hb.score}点</span></div>
+    <div class="sentinel-score-row"><span class="k">　MineをGUESS成功 ${hb.mineGuessSuccess}/${hb.totalMines}個（1個${hb.pointsPerMine}点）</span><span class="v">+${hb.mineGuessScore}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Mineを踏んだ ${hb.mineStepCount}個（50%減点）</span><span class="v">${hb.mineStepPenalty}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Core MineをGUESS成功 ${hb.coreGuessSuccess?'成功':'失敗'}</span><span class="v">+${hb.coreGuessScore}</span></div>
+    <div class="sentinel-score-row"><span class="k">　Core Mineを踏んだ（50%減点）</span><span class="v">${hb.coreStepPenalty}</span></div>
+    <div class="sentinel-score-row"><span class="k">　GUESS失敗 ${hb.guessFail}</span><span class="v">${hb.guessFailPenalty}</span></div>
+    <div class="sentinel-score-row"><span class="k">　未開放マス ${hb.unopenedCount}</span><span class="v">+${hb.unopenedScore}</span></div>
+    <div class="sentinel-score-row"><span class="k">　フルオープンボーナス</span><span class="v">+${hb.fullOpenBonus}</span></div>
+    <div class="sentinel-score-row"><span class="k">　残り時間ボーナス</span><span class="v">+${hb.timeBonus}</span></div>
+  `;
+}
+
+/* ---------- 通信切断・リマッチ・ホームへ戻る ---------- */
+function handleSentinelOpponentDisconnected(){
+  if (state.mode !== 'sentinel') return;
+  state.sentinel.opponentDisconnected = true;
+  showToast('相手との通信が切れました。あなたの勝ちです');
+  sentinelStopGuardianTimer();
+  sentinelStopHunterTimer();
+  if (state.sentinel.radarScanTimerId){ clearInterval(state.sentinel.radarScanTimerId); state.sentinel.radarScanTimerId = null; }
+  showScreen('screen-sentinel-result');
+  document.getElementById('sentinel-outcome-banner').textContent = '🏆 相手の切断によりあなたの勝ち';
+  document.getElementById('sentinel-outcome-banner').className = 'dual-outcome win';
+  document.getElementById('sentinel-round1-table').innerHTML = '';
+  document.getElementById('sentinel-round2-table').innerHTML = '';
+  document.getElementById('sentinel-total-my-label').textContent = state.playerName;
+  document.getElementById('sentinel-total-my-score').textContent = '―';
+  document.getElementById('sentinel-total-opp-label').textContent = '通信切断';
+  document.getElementById('sentinel-total-opp-score').textContent = '―';
+}
+
+function requestSentinelRematch(){
+  state.sentinel.rematchReady = true;
+  const btn = document.getElementById('btn-sentinel-rematch');
+  btn.disabled = true;
+  btn.textContent = '相手を待っています…';
+  skywaySend({ type:'sentinelRematchReady' });
+  sentinelCheckBothRematchReady();
+}
+function sentinelCheckBothRematchReady(){
+  if (state.sentinel.rematchReady && state.sentinel.opponentRematchReady){
+    const btn = document.getElementById('btn-sentinel-rematch');
+    btn.disabled = false;
+    btn.textContent = 'リマッチ';
+    state.sentinel.rematchReady = false;
+    state.sentinel.opponentRematchReady = false;
+    sentinelRunCountdownThenStart();
+  }
+}
+
+function goHomeFromSentinel(){
+  sentinelStopGuardianTimer();
+  sentinelStopHunterTimer();
+  if (state.sentinel.radarScanTimerId){ clearInterval(state.sentinel.radarScanTimerId); state.sentinel.radarScanTimerId = null; }
+  skywayLeaveRoom();
+  state.mode = 'solo';
+  state.sentinel.code = null;
+  state.sentinel.role = null;
+  state.sentinel.opponentName = '';
+  state.sentinel.opponentDisconnected = false;
+  state.sentinel.rematchReady = false;
+  state.sentinel.opponentRematchReady = false;
+  const btn = document.getElementById('btn-sentinel-rematch');
+  if (btn){ btn.disabled = false; btn.textContent = 'リマッチ'; }
+  showScreen('screen-home');
+}
+
+
+
+/* =========================================================================
+   レンダリング
+   ========================================================================= */
+let cellEls = [];
+
+function buildBoardDOM(){
+  const boardEl = document.getElementById('board');
+  boardEl.style.gridTemplateColumns = `repeat(${state.cols}, 1fr)`;
+  boardEl.innerHTML = '';
+  cellEls = [];
+  for (let r=0;r<state.rows;r++){
+    const rowEls = [];
+    for (let c=0;c<state.cols;c++){
+      const el = document.createElement('div');
+      el.className = 'cell closed';
+      el.addEventListener('click', ()=>{
+        if (state.phase === 'guessing') toggleFlag(r,c);
+        else openCell(r,c);
+      });
+      boardEl.appendChild(el);
+      rowEls.push(el);
+    }
+    cellEls.push(rowEls);
+  }
+}
+
+function renderAll(){
+  renderHUD();
+  renderBoard();
+  renderModeUI();
+}
+
+function renderHUD(){
+  document.getElementById('hud-score').textContent = state.score;
+  document.getElementById('hud-time').textContent = state.timeLeft;
+  document.getElementById('hud-explosions').textContent = `${state.explosionCount}/${state.bombCount}`;
+  const maxGuess = state.bombCount - state.explosionCount;
+  document.getElementById('hud-guess').textContent = `${maxGuess - state.flagCount}`;
+  const timeBox = document.getElementById('hud-time-box');
+  timeBox.classList.toggle('low', state.timeLeft <= 30);
+}
+
+function renderBoard(){
+  const isGuessing = state.phase === 'guessing';
+  const isRevealing = state.phase === 'revealing';
+  const isResult = state.phase === 'result';
+  const isAnswerPhase = isRevealing || isResult;
+  for (let r=0;r<state.rows;r++){
+    for (let c=0;c<state.cols;c++){
+      const cell = state.board[r][c];
+      const el = cellEls[r][c];
+      el.className = 'cell';
+      el.style.animationDelay = '';
+      el.textContent = '';
+
+      if (cell.exploded){
+        el.classList.add('bomb','exploded');
+        continue;
+      }
+      if (isAnswerPhase && cell.isBomb){
+        // 答え合わせ表示：GUESSの正誤を可視化
+        el.classList.add('bomb');
+        if (cell.flagged) el.classList.add('bomb-marker-correct');
+        applyRevealAnimation(el, r, c, isRevealing);
+        continue;
+      }
+      if (isAnswerPhase && cell.flagged && !cell.isBomb){
+        el.classList.add('opened','bomb-marker-wrong');
+        applyRevealAnimation(el, r, c, isRevealing);
+        continue;
+      }
+
+      if (cell.opened){
+        el.classList.add('opened');
+        const span = document.createElement('span');
+        span.className = 'd' + cell.dist;
+        span.textContent = cell.dist;
+        el.appendChild(span);
+        if (cell.dist === CURRENT_DIFFICULTY.distanceCap){
+          el.classList.add('dist6-cell');
+        }
+        continue;
+      }
+
+      // 未開放
+      el.classList.add('closed');
+      if (cell.flagged){
+        el.classList.add('flagged');
+      } else if (isGuessing){
+        el.classList.add('guessable');
+      }
+    }
+  }
+}
+
+function applyRevealAnimation(el, r, c, isRevealing){
+  if (!isRevealing || !state.revealOrder) return;
+  const idx = state.revealOrder.get(`${r},${c}`);
+  if (idx === undefined) return;
+  el.classList.add('revealing');
+  el.style.animationDelay = `${idx * state.revealDelayStep}ms`;
+}
+
+function renderModeUI(){
+  const banner = document.getElementById('mode-banner');
+  const isGuessing = state.phase === 'guessing';
+  const isRevealing = state.phase === 'revealing';
+
+  banner.classList.toggle('show', isGuessing || isRevealing);
+  banner.classList.toggle('revealing-banner', isRevealing);
+  banner.textContent = isRevealing
+    ? '答え合わせ中 …'
+    : 'GUESSモード（タイマー停止中）― 爆弾だと思うマスに旗を立てて確定しよう';
+
+  document.getElementById('guess-actions-normal').style.display = (isGuessing || isRevealing) ? 'none' : 'flex';
+  document.getElementById('guess-actions-mode').style.display = isGuessing ? 'flex' : 'none';
+
+  const enterBtn = document.getElementById('btn-guess-enter');
+  enterBtn.disabled = !state.boardGenerated;
+}
+
+/* =========================================================================
+   画面遷移
+   ========================================================================= */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+let toastTimer = null;
+function showToast(msg, durationMs){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('show'), durationMs || 1800);
+}
+
+/* =========================================================================
+   結果画面
+   ========================================================================= */
+async function showResultScreen(){
+  document.getElementById('result-final-score').textContent = state.score;
+
+  const b = state.finishedBreakdown;
+  const rows = [
+    ['爆弾を踏んだ回数', `${state.explosionCount}回`, `${b.explosionPenalty}`, b.explosionPenalty<0?'neg':''],
+    ['GUESS成功', `${b.guessSuccess}個 (+200点)`, `+${b.guessSuccess*200}`, 'pos'],
+    ['GUESS失敗', `${b.guessFail}個 (-150点)`, `${-b.guessFail*150}`, b.guessFail>0?'neg':''],
+    ['未開放マス', `${b.unopenedCount}マス (+5点)`, `+${b.unopenedScore}`, 'pos'],
+    ['完全制覇ボーナス', b.perfectBonus? '達成！' : '未達成', b.perfectBonus? `+${b.perfectBonus}` : '0', b.perfectBonus?'pos':''],
+    ['タイムボーナス', `残り${state.timeLeft}秒 の半分`, `+${b.timeBonus}`, 'pos']
+  ];
+  const container = document.getElementById('result-breakdown');
+  container.innerHTML = rows.map(([k,note,v,cls])=>`
+    <div class="breakdown-row">
+      <span class="k">${k}<br><span style="font-size:11px;opacity:.7;">${note}</span></span>
+      <span class="v ${cls}">${v}</span>
+    </div>`).join('');
+
+  showScreen('screen-result');
+
+  // ランキング送信
+  const entry = {
+    name: state.playerName || 'PLAYER',
+    score: state.score,
+    timeLeft: state.timeLeft,
+    unopenedCount: b.unopenedCount,
+    explosions: state.explosionCount,
+    guessSuccess: b.guessSuccess,
+    playedAt: new Date().toISOString()
+  };
+  await submitScore(entry);
+  const list = assignRanks(sortLeaderboard(await loadLeaderboard()));
+  const mine = list.find(e => e.playedAt === entry.playedAt && e.name === entry.name);
+  const pill = document.getElementById('result-rank-pill');
+  if (mine){
+    pill.innerHTML = `今回の順位　<b>${mine.rank}位</b> / ${list.length}人中`;
+  } else {
+    pill.innerHTML = '';
+  }
+}
+
+/* =========================================================================
+   ランキング画面
+   ========================================================================= */
+async function showRankingScreen(){
+  showScreen('screen-ranking');
+  const listEl = document.getElementById('ranking-list');
+  listEl.innerHTML = '<div class="empty-note">読み込み中…</div>';
+  const raw = await loadLeaderboard();
+  if (raw.length === 0){
+    listEl.innerHTML = '<div class="empty-note">まだ記録がありません。最初の捜査官になろう。</div>';
+    return;
+  }
+  const ranked = assignRanks(sortLeaderboard(raw));
+  const top = ranked.slice(0, TOP_RANKING_DISPLAY);
+  const recent = sortByRecent(ranked).slice(0, RECENT_DISPLAY);
+
+  let html = '';
+  html += `<div class="rank-section-title">🏆 TOP ${TOP_RANKING_DISPLAY}</div>`;
+  html += top.map(e => rankRowHTML(e)).join('');
+  html += `<div class="rank-section-title">🕒 直近の挑戦者</div>`;
+  html += recent.length
+    ? recent.map(e => rankRowHTML(e)).join('')
+    : '<div class="empty-note">記録がありません。</div>';
+
+  listEl.innerHTML = html;
+}
+
+function rankRowHTML(e){
+  const date = new Date(e.playedAt);
+  const dateStr = isNaN(date) ? '' : `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+  return `
+    <div class="rank-row">
+      <div class="rank-num">${e.rank}</div>
+      <div>
+        <div class="rank-name">${escapeHTML(e.name)}</div>
+        <div class="rank-meta">
+          <span>残${e.timeLeft}s</span>
+          <span>未開放${e.unopenedCount}</span>
+          <span>爆発${e.explosions}</span>
+          <span>GUESS成功${e.guessSuccess}</span>
+          <span>${dateStr}</span>
+        </div>
+      </div>
+      <div class="rank-score mono">${e.score}</div>
+    </div>`;
+}
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* =========================================================================
+   イベント登録
+   ========================================================================= */
+/* 捜査官名が未入力の場合はエラーを表示してnullを返す（ゲーム開始を阻止するため） */
+function getValidatedPlayerName(){
+  const nameInput = document.getElementById('playerName');
+  const trimmed = nameInput.value.trim();
+  if (!trimmed){
+    showToast('捜査官名を入力してください');
+    nameInput.focus();
+    return null;
+  }
+  return trimmed.slice(0,12);
+}
+
+document.getElementById('btn-start').addEventListener('click', ()=>{
+  const name = getValidatedPlayerName();
+  if (!name) return;
+  state.playerName = name;
+  savePlayerName(state.playerName);
+  startNewGame();
+});
+
+document.getElementById('btn-dual-home').addEventListener('click', ()=>{
+  const name = getValidatedPlayerName();
+  if (!name) return;
+  state.playerName = name;
+  savePlayerName(state.playerName);
+  showScreen('screen-battle-select');
+  if (!skywayConfigured()){
+    showToast('⚠️ SkyWayが未設定のため、対戦機能は使えません（コード内のSKYWAY_APP_ID/SKYWAY_SECRET_KEYを設定してください）', 4000);
+  }
+});
+document.getElementById('btn-battle-select-back').addEventListener('click', ()=> showScreen('screen-home'));
+document.getElementById('btn-select-dual').addEventListener('click', ()=> showScreen('screen-dual-lobby'));
+document.getElementById('btn-select-open').addEventListener('click', ()=> showScreen('screen-open-lobby'));
+document.getElementById('btn-select-sentinel').addEventListener('click', ()=> showScreen('screen-sentinel-lobby'));
+
+document.getElementById('btn-dual-lobby-back').addEventListener('click', ()=> showScreen('screen-battle-select'));
+document.getElementById('btn-dual-create').addEventListener('click', handleDualCreate);
+document.getElementById('btn-dual-join').addEventListener('click', handleDualJoin);
+document.getElementById('btn-dual-rules-link').addEventListener('click', ()=>{ setRuleTab('dual'); showScreen('screen-rules'); });
+
+document.getElementById('btn-open-lobby-back').addEventListener('click', ()=> showScreen('screen-battle-select'));
+document.getElementById('btn-open-create').addEventListener('click', handleOpenCreate);
+document.getElementById('btn-open-join').addEventListener('click', handleOpenJoin);
+document.getElementById('btn-open-rules-link').addEventListener('click', ()=>{ setRuleTab('open'); showScreen('screen-rules'); });
+
+document.getElementById('btn-sentinel-lobby-back').addEventListener('click', ()=> showScreen('screen-battle-select'));
+document.getElementById('btn-sentinel-create').addEventListener('click', handleSentinelCreate);
+document.getElementById('btn-sentinel-join').addEventListener('click', handleSentinelJoin);
+document.getElementById('btn-sentinel-rules-link').addEventListener('click', ()=>{ setRuleTab('sentinel'); showScreen('screen-rules'); });
+document.getElementById('btn-sentinel-ready').addEventListener('click', ()=> sentinelConfirmGuardianReady());
+document.getElementById('btn-sentinel-clear-mines').addEventListener('click', sentinelClearGuardianSetup);
+document.getElementById('btn-hint-radar').addEventListener('click', sentinelUseHintRadar);
+document.getElementById('btn-hint-border').addEventListener('click', sentinelUseHintBorder);
+document.getElementById('btn-hint-safe').addEventListener('click', sentinelUseHintSafe);
+document.getElementById('btn-hint-signal').addEventListener('click', sentinelUseHintSignal);
+document.getElementById('btn-sentinel-guess-enter').addEventListener('click', sentinelEnterGuessMode);
+document.getElementById('btn-sentinel-guess-confirm').addEventListener('click', sentinelConfirmGuess);
+document.getElementById('btn-sentinel-rematch').addEventListener('click', requestSentinelRematch);
+document.getElementById('btn-sentinel-home-back').addEventListener('click', goHomeFromSentinel);
+
+document.getElementById('btn-dual-waiting-cancel').addEventListener('click', ()=>{
+  stopAllDualTimers();
+  stopAllOpenTimers();
+  sentinelStopGuardianTimer();
+  sentinelStopHunterTimer();
+  if (state.sentinel.radarScanTimerId){ clearInterval(state.sentinel.radarScanTimerId); state.sentinel.radarScanTimerId = null; }
+  if (state.mode === 'sentinel' || state.sentinel.code){
+    skywayLeaveRoom();
+    state.sentinel.code = null;
+    state.sentinel.role = null;
+  }
+  state.mode = 'solo';
+  showScreen('screen-home');
+});
+document.getElementById('btn-dual-rematch').addEventListener('click', ()=>{
+  if (state.mode === 'open') requestOpenRematch(); else requestDualRematch();
+});
+document.getElementById('btn-dual-home-back').addEventListener('click', ()=>{
+  if (state.mode === 'open') goHomeFromOpen(); else goHomeFromDual();
+});
+
+document.getElementById('rule-tab-solo').addEventListener('click', ()=> setRuleTab('solo'));
+document.getElementById('rule-tab-dual').addEventListener('click', ()=> setRuleTab('dual'));
+document.getElementById('rule-tab-open').addEventListener('click', ()=> setRuleTab('open'));
+document.getElementById('rule-tab-sentinel').addEventListener('click', ()=> setRuleTab('sentinel'));
+
+let screenBeforeRanking = 'screen-home';
+document.getElementById('btn-ranking-home').addEventListener('click', ()=>{ screenBeforeRanking = 'screen-home'; showRankingScreen(); });
+document.getElementById('btn-ranking-back').addEventListener('click', ()=> showScreen(screenBeforeRanking));
+document.getElementById('btn-result-ranking').addEventListener('click', ()=>{ screenBeforeRanking = 'screen-result'; showRankingScreen(); });
+
+document.getElementById('btn-rules-home').addEventListener('click', ()=>{ setRuleTab('solo'); showScreen('screen-rules'); });
+document.getElementById('btn-rules-back').addEventListener('click', ()=> showScreen('screen-home'));
+
+document.getElementById('btn-guess-enter').addEventListener('click', enterGuessMode);
+document.getElementById('btn-guess-confirm').addEventListener('click', confirmGuess);
+
+document.getElementById('btn-retry').addEventListener('click', ()=>{
+  showScreen('screen-home');
+});
+
+/* =========================================================================
+   初期化
+   ========================================================================= */
+(async function init(){
+  const savedName = await loadSavedName();
+  if (savedName) document.getElementById('playerName').value = savedName;
+})();
+
+})();
+</script>
+</body>
+</html>
