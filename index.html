@@ -1093,7 +1093,7 @@
    ① ランキング用設定：Google スプレッドシート(Apps Script Web App)
    README.md の手順でApps Scriptを発行し、そのURLをここに貼り付けてください。
    ========================================================================= */
-const SHEETS_WEBAPP_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL";
+const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwxVxsY1ahA3s4ZpQCBdGxyscp890qm__G4hOuiia81EThvrmJPTZ1s9YUVPUFrKoOJ/exec";
 
 function sheetsConfigured(){
   return !!SHEETS_WEBAPP_URL && SHEETS_WEBAPP_URL.indexOf('YOUR_') !== 0;
@@ -1106,8 +1106,8 @@ function sheetsConfigured(){
    ⚠️ このやり方はシークレットキーがブラウザから丸見えになる簡易版です。
    個人・友人間で遊ぶ用途に限定してください（README.md参照）。
    ========================================================================= */
-const SKYWAY_APP_ID = "YOUR_SKYWAY_APP_ID";
-const SKYWAY_SECRET_KEY = "YOUR_SKYWAY_SECRET_KEY";
+const SKYWAY_APP_ID = "32f31e2d-ebfa-445e-ab3c-158bc2d5614d";
+const SKYWAY_SECRET_KEY = "xB0h2zeYFHVRIgix9QCyrV9DvI+J4uQbViA2FUNdA7A=";
 
 function skywayConfigured(){
   return !!(window.skyway_room && window.skyway_token &&
