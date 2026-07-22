@@ -1086,7 +1086,7 @@
    ① ランキング用設定：Google スプレッドシート(Apps Script Web App)
    README.md の手順でApps Scriptを発行し、そのURLをここに貼り付けてください。
    ========================================================================= */
-const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYtXeRp2WTyz8VAHhhrKH-EFzLeDBBxGpLxKk9f6lZ4FHysOlJnYrL6SXEnPx66CK9/exec";
+const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwxVxsY1ahA3s4ZpQCBdGxyscp890qm__G4hOuiia81EThvrmJPTZ1s9YUVPUFrKoOJ/exec";
 
 function sheetsConfigured(){
   return !!SHEETS_WEBAPP_URL && SHEETS_WEBAPP_URL.indexOf('YOUR_') !== 0;
@@ -1166,18 +1166,35 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
   sw.localStream = await SkyWayStreamFactory.createDataStream();
   await me.publish(sw.localStream);
 
-  const subscribeIfNeeded = async (publication)=>{
-    if (!publication || publication.publisher.id === me.id) return;
-    if (publication.contentType !== 'data') return;
-    const { stream } = await me.subscribe(publication.id);
-    stream.onData.add((data)=>{
-      if (!sw.onMessage) return;
-      try{ sw.onMessage(JSON.parse(data)); }catch(e){ console.error('SkyWayメッセージ解析エラー:', e); }
-    });
+  const subscribedIds = new Set();
+  const extractPublication = (e)=> (e && e.publication) ? e.publication : e;
+
+  const subscribeIfNeeded = async (pubLike)=>{
+    const publication = extractPublication(pubLike);
+    if (!publication || !publication.publisher) return;
+    if (publication.publisher.id === me.id) return; // 自分自身の配信は購読しない
+    if (publication.id && subscribedIds.has(publication.id)) return; // 二重購読防止
+    try{
+      const { stream } = await me.subscribe(publication.id);
+      if (publication.id) subscribedIds.add(publication.id);
+      console.log('[SkyWay購読成功]', publication.id);
+      stream.onData.add((data)=>{
+        console.log('[SkyWay受信]', data);
+        if (!sw.onMessage) return;
+        try{ sw.onMessage(JSON.parse(data)); }catch(err){ console.error('SkyWayメッセージ解析エラー:', err); }
+      });
+    }catch(err){
+      console.error('SkyWay購読エラー:', err);
+    }
   };
 
-  for (const pub of room.publications){ await subscribeIfNeeded(pub); }
-  room.onStreamPublished.add((e)=> subscribeIfNeeded(e.publication));
+  try{
+    const existing = Array.isArray(room.publications) ? room.publications : Array.from(room.publications || []);
+    for (const pub of existing){ await subscribeIfNeeded(pub); }
+  }catch(err){
+    console.error('既存publicationの購読処理でエラー:', err);
+  }
+  room.onStreamPublished.add((e)=> subscribeIfNeeded(e));
   room.onMemberJoined.add((e)=>{
     if (e.member.id !== me.id && sw.onPeerJoined) sw.onPeerJoined(e.member);
   });
@@ -1190,7 +1207,12 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
 function skywaySend(payload){
   if (sw.localStream){
-    try{ sw.localStream.write(JSON.stringify(payload)); }catch(e){ console.error('SkyWay送信エラー:', e); }
+    try{
+      sw.localStream.write(JSON.stringify(payload));
+      console.log('[SkyWay送信]', payload.type, payload);
+    }catch(e){ console.error('SkyWay送信エラー:', e); }
+  } else {
+    console.warn('[SkyWay送信失敗] localStreamが未準備です', payload && payload.type);
   }
 }
 
