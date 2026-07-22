@@ -59,6 +59,12 @@
 
   /* ---------- HOME ---------- */
   #screen-home{ align-items:center; text-align:center; }
+  .version-tag{
+    padding: 6px 0 2px;
+    font-size:11px;
+    letter-spacing:.08em;
+    color:var(--text-faint);
+  }
   .home-center{ flex:1; width:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; }
   .brand-eyebrow{
     font-family:'JetBrains Mono', monospace;
@@ -428,6 +434,7 @@
         <button class="btn btn-ghost" id="btn-rules-home">📖 ルールブック</button>
       </div>
     </div>
+    <div class="version-tag mono"></div>
   </section>
 
   <!-- ============ GAME ============ -->
@@ -1086,7 +1093,7 @@
    ① ランキング用設定：Google スプレッドシート(Apps Script Web App)
    README.md の手順でApps Scriptを発行し、そのURLをここに貼り付けてください。
    ========================================================================= */
-const SHEETS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwxVxsY1ahA3s4ZpQCBdGxyscp890qm__G4hOuiia81EThvrmJPTZ1s9YUVPUFrKoOJ/exec";
+const SHEETS_WEBAPP_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL";
 
 function sheetsConfigured(){
   return !!SHEETS_WEBAPP_URL && SHEETS_WEBAPP_URL.indexOf('YOUR_') !== 0;
@@ -1099,8 +1106,8 @@ function sheetsConfigured(){
    ⚠️ このやり方はシークレットキーがブラウザから丸見えになる簡易版です。
    個人・友人間で遊ぶ用途に限定してください（README.md参照）。
    ========================================================================= */
-const SKYWAY_APP_ID = "32f31e2d-ebfa-445e-ab3c-158bc2d5614d";
-const SKYWAY_SECRET_KEY = "xB0h2zeYFHVRIgix9QCyrV9DvI+J4uQbViA2FUNdA7A=";
+const SKYWAY_APP_ID = "YOUR_SKYWAY_APP_ID";
+const SKYWAY_SECRET_KEY = "YOUR_SKYWAY_SECRET_KEY";
 
 function skywayConfigured(){
   return !!(window.skyway_room && window.skyway_token &&
@@ -1150,7 +1157,7 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
   let room;
   if (mode === 'create'){
-    room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
+    room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
   } else {
     room = await SkyWayRoom.Find(context, { name: roomName });
     if (!room) throw new Error('ROOM_NOT_FOUND');
@@ -1166,35 +1173,18 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
   sw.localStream = await SkyWayStreamFactory.createDataStream();
   await me.publish(sw.localStream);
 
-  const subscribedIds = new Set();
-  const extractPublication = (e)=> (e && e.publication) ? e.publication : e;
-
-  const subscribeIfNeeded = async (pubLike)=>{
-    const publication = extractPublication(pubLike);
-    if (!publication || !publication.publisher) return;
-    if (publication.publisher.id === me.id) return; // 自分自身の配信は購読しない
-    if (publication.id && subscribedIds.has(publication.id)) return; // 二重購読防止
-    try{
-      const { stream } = await me.subscribe(publication.id);
-      if (publication.id) subscribedIds.add(publication.id);
-      console.log('[SkyWay購読成功]', publication.id);
-      stream.onData.add((data)=>{
-        console.log('[SkyWay受信]', data);
-        if (!sw.onMessage) return;
-        try{ sw.onMessage(JSON.parse(data)); }catch(err){ console.error('SkyWayメッセージ解析エラー:', err); }
-      });
-    }catch(err){
-      console.error('SkyWay購読エラー:', err);
-    }
+  const subscribeIfNeeded = async (publication)=>{
+    if (!publication || publication.publisher.id === me.id) return;
+    if (publication.contentType !== 'data') return;
+    const { stream } = await me.subscribe(publication.id);
+    stream.onData.add((data)=>{
+      if (!sw.onMessage) return;
+      try{ sw.onMessage(JSON.parse(data)); }catch(e){ console.error('SkyWayメッセージ解析エラー:', e); }
+    });
   };
 
-  try{
-    const existing = Array.isArray(room.publications) ? room.publications : Array.from(room.publications || []);
-    for (const pub of existing){ await subscribeIfNeeded(pub); }
-  }catch(err){
-    console.error('既存publicationの購読処理でエラー:', err);
-  }
-  room.onStreamPublished.add((e)=> subscribeIfNeeded(e));
+  for (const pub of room.publications){ await subscribeIfNeeded(pub); }
+  room.onStreamPublished.add((e)=> subscribeIfNeeded(e.publication));
   room.onMemberJoined.add((e)=>{
     if (e.member.id !== me.id && sw.onPeerJoined) sw.onPeerJoined(e.member);
   });
@@ -1207,12 +1197,7 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
 function skywaySend(payload){
   if (sw.localStream){
-    try{
-      sw.localStream.write(JSON.stringify(payload));
-      console.log('[SkyWay送信]', payload.type, payload);
-    }catch(e){ console.error('SkyWay送信エラー:', e); }
-  } else {
-    console.warn('[SkyWay送信失敗] localStreamが未準備です', payload && payload.type);
+    try{ sw.localStream.write(JSON.stringify(payload)); }catch(e){ console.error('SkyWay送信エラー:', e); }
   }
 }
 
@@ -1220,6 +1205,8 @@ async function skywayLeaveRoom(){
   try{ if (sw.me) await sw.me.leave(); }catch(e){ /* 無視 */ }
   sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
 }
+
+const APP_VERSION = '1.0.0'; // バージョンを上げるときはここだけ書き換えればOK
 
 /* =========================================================================
    設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
@@ -4447,6 +4434,8 @@ document.getElementById('btn-retry').addEventListener('click', ()=>{
 (async function init(){
   const savedName = await loadSavedName();
   if (savedName) document.getElementById('playerName').value = savedName;
+  const versionEl = document.querySelector('.version-tag');
+  if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
 })();
 
 })();
