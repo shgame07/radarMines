@@ -1134,6 +1134,10 @@ function createSkyWayAuthToken(){
             id: '*', name: '*', actions: ['write'],
             publication: { actions: ['write'] },
             subscription: { actions: ['write'] }
+          }],
+          sfuBots: [{
+            actions: ['create', 'write', 'delete'],
+            forwardings: { actions: ['create', 'write', 'delete'] }
           }]
         }]
       }
