@@ -1153,14 +1153,18 @@ let sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null
 async function skywayJoinRoom(roomName, myName, mode, handlers){
   const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = window.skyway_room;
   const token = createSkyWayAuthToken();
+  console.log('[SkyWay診断] トークン生成完了。Context作成開始 roomName=', roomName, 'mode=', mode);
   const context = await SkyWayContext.Create(token);
+  console.log('[SkyWay診断] Context作成成功');
 
   let room;
   if (mode === 'create'){
     room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
+    console.log('[SkyWay診断] ルームcreate/find成功 roomId=', room.id);
   } else {
     room = await SkyWayRoom.Find(context, { name: roomName });
     if (!room) throw new Error('ROOM_NOT_FOUND');
+    console.log('[SkyWay診断] ルームfind成功 roomId=', room.id);
   }
 
   sw.room = room;
@@ -1170,25 +1174,51 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
   const me = await room.join({ name: myName });
   sw.me = me;
+  console.log('[SkyWay診断] 入室成功 memberId=', me.id, 'roomName=', roomName);
   sw.localStream = await SkyWayStreamFactory.createDataStream();
   await me.publish(sw.localStream);
+  console.log('[SkyWay診断] 自分のDataStream publish成功');
 
-  const subscribeIfNeeded = async (publication)=>{
-    if (!publication || publication.publisher.id === me.id) return;
+  const subscribedIds = new Set();
+  const extractPublication = (e)=> (e && e.publication) ? e.publication : e;
+
+  const subscribeIfNeeded = async (pubLike)=>{
+    const publication = extractPublication(pubLike);
+    if (!publication || !publication.publisher) return;
+    if (publication.publisher.id === me.id) return; // 自分自身は購読しない
     if (publication.contentType !== 'data') return;
-    const { stream } = await me.subscribe(publication.id);
-    stream.onData.add((data)=>{
-      if (!sw.onMessage) return;
-      try{ sw.onMessage(JSON.parse(data)); }catch(e){ console.error('SkyWayメッセージ解析エラー:', e); }
-    });
+    if (publication.id && subscribedIds.has(publication.id)) return; // 二重購読防止
+    try{
+      const { stream } = await me.subscribe(publication.id);
+      if (publication.id) subscribedIds.add(publication.id);
+      console.log('[SkyWay診断] 相手のDataStream購読成功 publicationId=', publication.id);
+      stream.onData.add((data)=>{
+        console.log('[SkyWay診断] データ受信:', data);
+        if (!sw.onMessage) return;
+        try{ sw.onMessage(JSON.parse(data)); }catch(e){ console.error('SkyWayメッセージ解析エラー:', e); }
+      });
+    }catch(err){
+      console.error('[SkyWay診断] 購読エラー:', err);
+    }
   };
 
-  for (const pub of room.publications){ await subscribeIfNeeded(pub); }
-  room.onStreamPublished.add((e)=> subscribeIfNeeded(e.publication));
+  try{
+    const existing = Array.isArray(room.publications) ? room.publications : Array.from(room.publications || []);
+    console.log('[SkyWay診断] 入室時点の既存publication数=', existing.length);
+    for (const pub of existing){ await subscribeIfNeeded(pub); }
+  }catch(err){
+    console.error('[SkyWay診断] 既存publication購読処理でエラー:', err);
+  }
+  room.onStreamPublished.add((e)=>{
+    console.log('[SkyWay診断] onStreamPublished発火', e);
+    subscribeIfNeeded(e);
+  });
   room.onMemberJoined.add((e)=>{
+    console.log('[SkyWay診断] onMemberJoined発火 memberId=', e.member && e.member.id);
     if (e.member.id !== me.id && sw.onPeerJoined) sw.onPeerJoined(e.member);
   });
   room.onMemberLeft.add((e)=>{
+    console.log('[SkyWay診断] onMemberLeft発火');
     if (e.member.id !== me.id && sw.onPeerLeft) sw.onPeerLeft();
   });
 
@@ -1197,7 +1227,12 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
 function skywaySend(payload){
   if (sw.localStream){
-    try{ sw.localStream.write(JSON.stringify(payload)); }catch(e){ console.error('SkyWay送信エラー:', e); }
+    try{
+      sw.localStream.write(JSON.stringify(payload));
+      console.log('[SkyWay診断] 送信:', payload.type);
+    }catch(e){ console.error('SkyWay送信エラー:', e); }
+  } else {
+    console.warn('[SkyWay診断] 送信失敗（localStream未準備）:', payload && payload.type);
   }
 }
 
@@ -1206,7 +1241,7 @@ async function skywayLeaveRoom(){
   sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
 }
 
-const APP_VERSION = '1.0.1'; // バージョンを上げるときはここだけ書き換えればOK
+const APP_VERSION = '1.0.2'; // バージョンを上げるときはここだけ書き換えればOK
 
 /* =========================================================================
    設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
