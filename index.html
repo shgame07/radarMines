@@ -1134,10 +1134,6 @@ function createSkyWayAuthToken(){
             id: '*', name: '*', actions: ['write'],
             publication: { actions: ['write'] },
             subscription: { actions: ['write'] }
-          }],
-          sfuBots: [{
-            actions: ['create', 'write', 'delete'],
-            forwardings: [{ actions: ['create', 'write', 'delete'] }]
           }]
         }]
       }
@@ -1161,7 +1157,7 @@ async function skywayJoinRoom(roomName, myName, mode, handlers){
 
   let room;
   if (mode === 'create'){
-    room = await SkyWayRoom.FindOrCreate(context, { type: 'sfu', name: roomName });
+    room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
   } else {
     room = await SkyWayRoom.Find(context, { name: roomName });
     if (!room) throw new Error('ROOM_NOT_FOUND');
@@ -1210,7 +1206,7 @@ async function skywayLeaveRoom(){
   sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
 }
 
-const APP_VERSION = '1.0.0'; // バージョンを上げるときはここだけ書き換えればOK
+const APP_VERSION = '1.0.1'; // バージョンを上げるときはここだけ書き換えればOK
 
 /* =========================================================================
    設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
