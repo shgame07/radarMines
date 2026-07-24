@@ -1241,7 +1241,7 @@ async function skywayLeaveRoom(){
   sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
 }
 
-const APP_VERSION = '1.0.2'; // バージョンを上げるときはここだけ書き換えればOK
+const APP_VERSION = '1.0.3'; // バージョンを上げるときはここだけ書き換えればOK
 
 /* =========================================================================
    設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
@@ -1397,6 +1397,7 @@ const state = {
     role: null,           // 'host' | 'guest'
     myName: '',
     opponentName: '',
+    boardSentToGuest: false, // 'hello'受信をトリガーに一度だけboardを送るためのガード
     opponentGuessDeadline: null, // epoch ms（相手GUESS確定からの20秒締切）
     opponentGuessTickId: null,
     opponentGuessHandled: false,
@@ -1411,6 +1412,7 @@ const state = {
     role: null,             // 'host' | 'guest'
     myName: '',
     opponentName: '',
+    boardSentToGuest: false, // 'hello'受信をトリガーに一度だけboardを送るためのガード
     turnTickId: null,
     guessTickId: null,
     currentTurn: null,      // 'host' | 'guest'
@@ -2106,6 +2108,7 @@ async function handleDualCreate(){
     state.dual.role = 'host';
     state.dual.myName = state.playerName;
     state.dual.opponentName = '';
+    state.dual.boardSentToGuest = false;
     await skywayJoinRoom(dualRoomNameFromCode(code), 'host', 'create', {
       onMessage: handleDualMessage,
       onPeerJoined: ()=> onDualPeerJoined(),
@@ -2129,11 +2132,12 @@ function enterDualWaitingAsHost(code){
   setDualWaitingStatus('このコードを相手に伝えて「参加する」を押してもらいましょう');
 }
 
-/* ホストの相手(guest)が入室してきたときに呼ばれる。盤面を生成して送信する。 */
+/* ホストの相手(guest)が入室してきたときに呼ばれる。
+   ここではまだ盤面を送らない：シグナリング上「入室した」と分かった瞬間は
+   実際のP2Pデータ通信路がまだ開通していないことがあるため、
+   ゲストからの'hello'が実際に届く（＝通信路が開通した証拠）まで待つ。 */
 async function onDualPeerJoined(){
-  setDualWaitingStatus('相手が参加しました。盤面を準備しています…');
-  skywaySend({ type:'hello', name: state.playerName });
-  dualHostGenerateAndSend();
+  setDualWaitingStatus('相手が参加しました。接続を確立しています…');
 }
 
 function dualHostGenerateAndSend(){
@@ -2194,6 +2198,13 @@ function handleDualMessage(msg){
     case 'hello':
       state.dual.opponentName = msg.name || '相手';
       updateDualOpponentNameUI();
+      // ゲストからの'hello'が実際に届いた＝通信路が開通している証拠。
+      // ここで初めて（一度だけ）盤面を生成して送信する。
+      if (state.dual.role === 'host' && !state.dual.boardSentToGuest){
+        state.dual.boardSentToGuest = true;
+        skywaySend({ type:'hello', name: state.playerName });
+        dualHostGenerateAndSend();
+      }
       break;
     case 'board':
       state.dual.opponentName = msg.hostName || state.dual.opponentName || '相手';
@@ -2497,6 +2508,7 @@ async function handleOpenCreate(){
     state.open.role = 'host';
     state.open.myName = state.playerName;
     state.open.opponentName = '';
+    state.open.boardSentToGuest = false;
     await skywayJoinRoom(openRoomNameFromCode(code), 'host', 'create', {
       onMessage: handleOpenMessage,
       onPeerJoined: ()=> onOpenPeerJoined(),
@@ -2521,9 +2533,7 @@ function enterOpenWaitingAsHost(code){
 }
 
 async function onOpenPeerJoined(){
-  setDualWaitingStatus('相手が参加しました。盤面を準備しています…');
-  skywaySend({ type:'hello', name: state.playerName });
-  openHostGenerateAndSend();
+  setDualWaitingStatus('相手が参加しました。接続を確立しています…');
 }
 
 /* ホストが盤面生成(検証込み)・先攻後攻抽選・初手セル開放を行い、相手へ送信する */
@@ -2589,6 +2599,11 @@ function handleOpenMessage(msg){
   switch(msg.type){
     case 'hello':
       state.open.opponentName = msg.name || '相手';
+      if (state.open.role === 'host' && !state.open.boardSentToGuest){
+        state.open.boardSentToGuest = true;
+        skywaySend({ type:'hello', name: state.playerName });
+        openHostGenerateAndSend();
+      }
       break;
     case 'board':
       runOpenCountdown({ bombs: msg.bombs, verified: msg.verified, cellStates: msg.cellStates, firstTurn: msg.firstTurn });
