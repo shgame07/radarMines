@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyWay 疎通診断（最小構成）</title>
+<script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/token/dist/skyway_token-latest.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@skyway-sdk/room/dist/skyway_room-latest.js"></script>
+<style>
+  body{ font-family:sans-serif; padding:16px; background:#111; color:#eee; }
+  button{ font-size:16px; padding:10px 16px; margin:6px 6px 6px 0; }
+  input{ font-size:16px; padding:8px; width:140px; }
+  #log{ white-space:pre-wrap; background:#000; color:#0f0; padding:12px; margin-top:16px;
+        font-family:monospace; font-size:13px; max-height:70vh; overflow-y:auto; border-radius:6px; }
+  .box{ border:1px solid #444; padding:12px; border-radius:8px; margin-bottom:12px; }
+  h2{ margin-top:0; }
+</style>
+</head>
+<body>
+  <h2>SkyWay 疎通診断（ゲームのコードを一切使わない最小テスト）</h2>
+
+  <div class="box">
+    <div>① どちらか1台で「部屋を作る」を押す → 5桁のコードが表示される</div>
+    <button id="btnCreate">部屋を作る</button>
+    <div id="roomCodeDisplay" style="font-size:24px; margin-top:8px;"></div>
+  </div>
+
+  <div class="box">
+    <div>② もう1台でコードを入力して「参加する」を押す</div>
+    <input id="joinCodeInput" placeholder="12345" maxlength="5">
+    <button id="btnJoin">参加する</button>
+  </div>
+
+  <div class="box">
+    <div>③ 繋がったらテキストを送ってみる（両方向で届くか確認）</div>
+    <input id="msgInput" placeholder="送るメッセージ">
+    <button id="btnSend">送信</button>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+const SKYWAY_APP_ID = "32f31e2d-ebfa-445e-ab3c-158bc2d5614d";
+const SKYWAY_SECRET_KEY = "xB0h2zeYFHVRIgix9QCyrV9DvI+J4uQbViA2FUNdA7A=";
+
+const logEl = document.getElementById('log');
+function log(...args){
+  const line = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  console.log(line);
+  logEl.textContent += `[${new Date().toLocaleTimeString()}] ${line}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function createToken(){
+  const { SkyWayAuthToken, uuidV4, nowInSec } = window.skyway_token;
+  return new SkyWayAuthToken({
+    jti: uuidV4(),
+    iat: nowInSec(),
+    exp: nowInSec() + 60 * 60,
+    scope: {
+      app: {
+        id: SKYWAY_APP_ID,
+        turn: true,
+        actions: ['read'],
+        channels: [{
+          id: '*', name: '*', actions: ['write'],
+          members: [{
+            id: '*', name: '*', actions: ['write'],
+            publication: { actions: ['write'] },
+            subscription: { actions: ['write'] }
+          }]
+        }]
+      }
+    }
+  }).encode(SKYWAY_SECRET_KEY);
+}
+
+let me = null, localStream = null, room = null;
+
+async function joinRoom(code, mode){
+  log('--- 接続処理開始 ---');
+  const { SkyWayContext, SkyWayRoom, SkyWayStreamFactory } = window.skyway_room;
+  const roomName = 'radarmines-diag-' + code;
+
+  log('トークン生成中...');
+  const token = createToken();
+  log('トークン生成OK。Context作成中...');
+  const context = await SkyWayContext.Create(token);
+  log('Context作成OK。ルーム' + (mode==='create'?'作成':'検索') + '中...');
+
+  if (mode === 'create'){
+    room = await SkyWayRoom.FindOrCreate(context, { type: 'p2p', name: roomName });
+  } else {
+    room = await SkyWayRoom.Find(context, { name: roomName });
+    if (!room){ log('❌ ルームが見つかりません。コードを確認してください'); return; }
+  }
+  log('✅ ルームOK roomId=' + room.id);
+
+  me = await room.join({ name: mode });
+  log('✅ 入室成功 memberId=' + me.id);
+
+  localStream = await SkyWayStreamFactory.createDataStream();
+  await me.publish(localStream);
+  log('✅ 自分のDataStream publish成功');
+
+  const subscribed = new Set();
+  const trySubscribe = async (pubLike)=>{
+    const pub = (pubLike && pubLike.publication) ? pubLike.publication : pubLike;
+    if (!pub || !pub.publisher || pub.publisher.id === me.id) return;
+    if (subscribed.has(pub.id)) return;
+    log('相手のpublicationを検知。購読を試みます publicationId=' + pub.id);
+    try{
+      const { stream } = await me.subscribe(pub.id);
+      subscribed.add(pub.id);
+      log('✅ 購読成功。データ受信待機中...');
+      stream.onData.add((data)=>{
+        log('📩 受信データ: ' + data);
+      });
+    }catch(err){
+      log('❌ 購読エラー: ' + err.message);
+    }
+  };
+
+  const existing = Array.isArray(room.publications) ? room.publications : Array.from(room.publications || []);
+  log('入室時点の既存publication数=' + existing.length);
+  for (const p of existing){ await trySubscribe(p); }
+
+  room.onStreamPublished.add((e)=>{ log('onStreamPublished発火'); trySubscribe(e); });
+  room.onMemberJoined.add((e)=>{ log('👤 相手が入室しました memberId=' + e.member.id); });
+  room.onMemberLeft.add((e)=>{ log('👋 相手が退室しました'); });
+
+  // --- ここが今回の目玉：実際のRTCPeerConnectionのICE状態を直接監視する ---
+  try{
+    const pc = me._context?.rtcApi?.rtcPeerConnections?.[0] || null;
+  }catch(e){ /* SDK内部構造は非公開のため取得できない場合がある */ }
+
+  log('--- セットアップ完了。webrtc-internalsでICE candidateの状況も確認してください ---');
+}
+
+document.getElementById('btnCreate').addEventListener('click', async ()=>{
+  const code = String(Math.floor(Math.random()*100000)).padStart(5,'0');
+  document.getElementById('roomCodeDisplay').textContent = 'コード: ' + code;
+  try{ await joinRoom(code, 'create'); }catch(e){ log('❌ エラー: ' + e.message); console.error(e); }
+});
+
+document.getElementById('btnJoin').addEventListener('click', async ()=>{
+  const code = document.getElementById('joinCodeInput').value.trim();
+  if (!/^[0-9]{5}$/.test(code)){ log('❌ 5桁の数字を入力してください'); return; }
+  try{ await joinRoom(code, 'guest'); }catch(e){ log('❌ エラー: ' + e.message); console.error(e); }
+});
+
+document.getElementById('btnSend').addEventListener('click', ()=>{
+  const msg = document.getElementById('msgInput').value;
+  if (!localStream){ log('❌ まだ接続していません'); return; }
+  try{
+    localStream.write(msg);
+    log('📤 送信: ' + msg);
+  }catch(e){ log('❌ 送信エラー: ' + e.message); }
+});
+</script>
+</body>
+</html>
