@@ -159,11 +159,12 @@
   }
   .mode-banner.show{ display:block; }
 
-  .board-wrap{ display:flex; justify-content:center; flex:1; align-items:center; }
-  #board{
+  .board-wrap{ display:flex; justify-content:center; flex:1; align-items:center; min-height:0; }
+  #board, #sentinel-guardian-board, #sentinel-hunter-board, #sentinel-reveal-board{
     display:grid;
     gap:4px;
     width:min(94vw, 440px);
+    max-height:100%;
     aspect-ratio:1/1;
     grid-auto-rows: 1fr;
   }
@@ -355,18 +356,27 @@
   .cell.sentinel-radar-peek{ background:rgba(127,184,232,.18); box-shadow: inset 0 0 0 1px rgba(127,184,232,.5); }
 
   .sentinel-hint-panel{
-    background:var(--panel); border:1px solid var(--panel-line); border-radius:var(--radius);
-    padding:10px; display:flex; flex-direction:column; gap:8px;
+    display:flex; flex-direction:column; gap:6px;
   }
-  .sentinel-hint-title{ font-size:12px; color:var(--text-faint); letter-spacing:.06em; text-align:center; }
-  .sentinel-hint-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .sentinel-hint-row{ display:flex; gap:6px; }
   .sentinel-hint-btn{
-    background:var(--panel-alt); border:1px solid var(--panel-line); border-radius:9px;
-    padding:10px 8px; text-align:left; color:var(--text); cursor:pointer;
+    flex:1; min-width:0;
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:9px;
+    padding:6px 2px; text-align:center; color:var(--text); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
   }
-  .sentinel-hint-btn .t{ font-weight:700; font-size:12.5px; color:var(--accent); }
-  .sentinel-hint-btn .d{ font-size:10.5px; color:var(--text-dim); margin-top:3px; line-height:1.4; }
+  .sentinel-hint-btn .e{ font-size:15px; line-height:1; }
+  .sentinel-hint-btn .t{ font-weight:700; font-size:10px; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .sentinel-hint-btn:active{ transform:scale(.95); background:var(--panel-alt); }
+  .sentinel-hint-btn.selected{ border-color:var(--accent); background:var(--accent-soft); }
   .sentinel-hint-btn:disabled{ opacity:.35; cursor:not-allowed; }
+  .sentinel-hint-confirm{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel-alt); border:1px solid var(--accent); border-radius:9px;
+    padding:7px 8px;
+  }
+  .sentinel-hint-confirm-desc{ flex:1; font-size:11px; line-height:1.4; color:var(--text-dim); }
+  .sentinel-hint-confirm .btn-sm{ flex-shrink:0; padding:8px 10px; font-size:12px; }
 
   .sentinel-radar-banner{
     text-align:center; font-size:13px; font-weight:700; padding:9px 12px; border-radius:10px;
@@ -660,12 +670,16 @@
     <div class="board-wrap"><div id="sentinel-hunter-board"></div></div>
 
     <div class="sentinel-hint-panel" id="sentinel-hint-panel">
-      <div class="sentinel-hint-title">ヒントカード（1試合につき1回）</div>
-      <div class="sentinel-hint-grid">
-        <button class="sentinel-hint-btn" id="btn-hint-radar"><span class="t">📡 Radar Scan</span><br><span class="d">10秒間、3〜5マス(ランダム決定)まで自由に覗き見られる</span></button>
-        <button class="sentinel-hint-btn" id="btn-hint-border"><span class="t">🧭 Border Intel</span><br><span class="d">盤面外周にあるMine数を教えてもらう</span></button>
-        <button class="sentinel-hint-btn" id="btn-hint-safe"><span class="t">🟢 Safe Reveal</span><br><span class="d">安全なマスをランダムで4マス開放する</span></button>
-        <button class="sentinel-hint-btn" id="btn-hint-signal"><span class="t">📶 Signal Boost</span><br><span class="d">Core Mineから最も遠い安全マスを1マス開放する</span></button>
+      <div class="sentinel-hint-row" id="sentinel-hint-row">
+        <button class="sentinel-hint-btn" id="btn-hint-radar" data-hint="radar"><span class="e">📡</span><span class="t">Radar</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-border" data-hint="border"><span class="e">🧭</span><span class="t">Border</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-safe" data-hint="safe"><span class="e">🟢</span><span class="t">Safe</span></button>
+        <button class="sentinel-hint-btn" id="btn-hint-signal" data-hint="signal"><span class="e">📶</span><span class="t">Signal</span></button>
+      </div>
+      <div class="sentinel-hint-confirm" id="sentinel-hint-confirm" style="display:none;">
+        <span class="sentinel-hint-confirm-desc" id="sentinel-hint-confirm-desc"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-hint-cancel">キャンセル</button>
+        <button class="btn btn-good btn-sm" id="btn-hint-confirm-use">このカードを使う</button>
       </div>
     </div>
 
@@ -1241,7 +1255,7 @@ async function skywayLeaveRoom(){
   sw = { room:null, me:null, localStream:null, onMessage:null, onPeerLeft:null, onPeerJoined:null };
 }
 
-const APP_VERSION = '1.0.3'; // バージョンを上げるときはここだけ書き換えればOK
+const APP_VERSION = '1.0.4'; // バージョンを上げるときはここだけ書き換えればOK
 
 /* =========================================================================
    設定（将来の難易度追加を見越して、盤面パラメータを一箇所に集約）
@@ -1453,6 +1467,7 @@ const state = {
     explodedCells: [],      // このラウンド中に踏んだマス [{r,c,isCore}]
     hintUsed: false,
     hintPanelDisabled: false,
+    hintSelected: null,     // 現在選択中のヒントカード('radar'|'border'|'safe'|'signal'|null)
     radarScanActive: false,
     radarScanLimit: 0,
     radarScanOpened: 0,
@@ -3412,6 +3427,7 @@ function sentinelEnterHunterScreen(){
   state.sentinel.openedCount = 0;
   state.sentinel.explodedCells = [];
   state.sentinel.hintUsed = false;
+  state.sentinel.hintSelected = null;
   state.sentinel.flagCount = 0;
   state.sentinel.myResult = null;
   state.sentinel.radarScanActive = false;
@@ -3431,9 +3447,7 @@ function sentinelEnterHunterScreen(){
     roleBanner.className = 'sentinel-role-banner hunter';
     roleBanner.textContent = `🎯 あなたはHunter（Round ${state.sentinel.round}）`;
     hintPanel.style.display = 'flex';
-    ['btn-hint-radar','btn-hint-border','btn-hint-safe','btn-hint-signal'].forEach(id=>{
-      document.getElementById(id).disabled = false;
-    });
+    sentinelRenderHintSelection();
     spectateNote.style.display = 'none';
     guessActionsNormal.style.display = 'flex';
     guessActionsMode.style.display = 'none';
@@ -3763,21 +3777,74 @@ function sentinelComputeGuardianResult(hunterMsg){
   };
 }
 
-/* ---------- ヒントカード ---------- */
+/* ---------- ヒントカード：選択 → 確認 → 使用 → 使用後はパネルごと消えて盤面を広く見せる ---------- */
+const SENTINEL_HINT_DESCRIPTIONS = {
+  radar:  '📡 Radar Scan：10秒間、3〜5マス(ランダム決定)まで自由に覗き見られる',
+  border: '🧭 Border Intel：盤面外周にあるMine数を教えてもらう',
+  safe:   '🟢 Safe Reveal：安全なマスをランダムで4マス開放する',
+  signal: '📶 Signal Boost：Core Mineから最も遠い安全マスを1マス開放する'
+};
+const SENTINEL_HINT_RUNNERS = {
+  radar: sentinelRunHintRadar,
+  border: sentinelRunHintBorder,
+  safe: sentinelRunHintSafe,
+  signal: sentinelRunHintSignal
+};
+
 function sentinelCanUseHint(){
   return state.sentinel.myRoleThisRound === 'hunter' && !state.sentinel.hintUsed && state.sentinel.phase === 'hunter_playing';
 }
 function sentinelDisableHintPanel(){
-  ['btn-hint-radar','btn-hint-border','btn-hint-safe','btn-hint-signal'].forEach(id=>{
-    document.getElementById(id).disabled = true;
-  });
+  const panel = document.getElementById('sentinel-hint-panel');
+  if (panel) panel.style.display = 'none';
 }
 
-function sentinelUseHintRadar(){
+/* カードを選択（1回目のタップ）：選択したカードをハイライトし、確認バーを表示する */
+function sentinelSelectHint(key){
   if (!sentinelCanUseHint()) return;
-  state.sentinel.hintUsed = true;
-  sentinelDisableHintPanel();
+  state.sentinel.hintSelected = key;
+  sentinelRenderHintSelection();
+}
 
+/* 選択を解除して一覧表示に戻す */
+function sentinelCancelHintSelection(){
+  state.sentinel.hintSelected = null;
+  sentinelRenderHintSelection();
+}
+
+function sentinelRenderHintSelection(){
+  const key = state.sentinel.hintSelected;
+  const row = document.getElementById('sentinel-hint-row');
+  const confirmBar = document.getElementById('sentinel-hint-confirm');
+  const descEl = document.getElementById('sentinel-hint-confirm-desc');
+
+  ['radar','border','safe','signal'].forEach(k=>{
+    const btn = document.getElementById('btn-hint-' + k);
+    btn.classList.toggle('selected', k === key);
+    btn.disabled = !!key && k !== key;
+  });
+
+  if (key){
+    descEl.textContent = SENTINEL_HINT_DESCRIPTIONS[key];
+    confirmBar.style.display = 'flex';
+  } else {
+    confirmBar.style.display = 'none';
+  }
+}
+
+/* 確認バーの「このカードを使う」（2回目のタップ）：ここで初めて効果を実行する */
+function sentinelConfirmUseHint(){
+  const key = state.sentinel.hintSelected;
+  if (!key) return;
+  if (!sentinelCanUseHint()){ sentinelCancelHintSelection(); return; }
+  const runner = SENTINEL_HINT_RUNNERS[key];
+  state.sentinel.hintSelected = null;
+  state.sentinel.hintUsed = true;
+  sentinelDisableHintPanel(); // 使用後はパネルごと消して盤面を広く見せる
+  if (runner) runner();
+}
+
+function sentinelRunHintRadar(){
   const limit = 3 + Math.floor(Math.random()*3);
   state.sentinel.radarScanActive = true;
   state.sentinel.radarScanLimit = limit;
@@ -3849,11 +3916,7 @@ function sentinelEndRadarScan(){
   sentinelSendHunterState();
 }
 
-function sentinelUseHintBorder(){
-  if (!sentinelCanUseHint()) return;
-  state.sentinel.hintUsed = true;
-  sentinelDisableHintPanel();
-
+function sentinelRunHintBorder(){
   let count = 0;
   const rows = state.sentinel.rows, cols = state.sentinel.cols;
   state.sentinel.mineCells.forEach(([r,c])=>{
@@ -3866,11 +3929,7 @@ function sentinelUseHintBorder(){
   sentinelSendHunterState();
 }
 
-function sentinelUseHintSafe(){
-  if (!sentinelCanUseHint()) return;
-  state.sentinel.hintUsed = true;
-  sentinelDisableHintPanel();
-
+function sentinelRunHintSafe(){
   const candidates = [];
   sentinelForEachCell((r,c,cell)=>{
     if (!cell.isCore && !cell.isMine && !cell.opened && !cell.exploded) candidates.push([r,c]);
@@ -3882,10 +3941,7 @@ function sentinelUseHintSafe(){
   showToast(`🟢 Safe Revealで${picks.length}マス開放しました`);
 }
 
-function sentinelUseHintSignal(){
-  if (!sentinelCanUseHint()) return;
-  state.sentinel.hintUsed = true;
-  sentinelDisableHintPanel();
+function sentinelRunHintSignal(){
 
   let maxDist = -1;
   let candidates = [];
@@ -4428,10 +4484,12 @@ document.getElementById('btn-sentinel-join').addEventListener('click', handleSen
 document.getElementById('btn-sentinel-rules-link').addEventListener('click', ()=>{ setRuleTab('sentinel'); showScreen('screen-rules'); });
 document.getElementById('btn-sentinel-ready').addEventListener('click', ()=> sentinelConfirmGuardianReady());
 document.getElementById('btn-sentinel-clear-mines').addEventListener('click', sentinelClearGuardianSetup);
-document.getElementById('btn-hint-radar').addEventListener('click', sentinelUseHintRadar);
-document.getElementById('btn-hint-border').addEventListener('click', sentinelUseHintBorder);
-document.getElementById('btn-hint-safe').addEventListener('click', sentinelUseHintSafe);
-document.getElementById('btn-hint-signal').addEventListener('click', sentinelUseHintSignal);
+document.getElementById('btn-hint-radar').addEventListener('click', ()=> sentinelSelectHint('radar'));
+document.getElementById('btn-hint-border').addEventListener('click', ()=> sentinelSelectHint('border'));
+document.getElementById('btn-hint-safe').addEventListener('click', ()=> sentinelSelectHint('safe'));
+document.getElementById('btn-hint-signal').addEventListener('click', ()=> sentinelSelectHint('signal'));
+document.getElementById('btn-hint-cancel').addEventListener('click', sentinelCancelHintSelection);
+document.getElementById('btn-hint-confirm-use').addEventListener('click', sentinelConfirmUseHint);
 document.getElementById('btn-sentinel-guess-enter').addEventListener('click', sentinelEnterGuessMode);
 document.getElementById('btn-sentinel-guess-confirm').addEventListener('click', sentinelConfirmGuess);
 document.getElementById('btn-sentinel-rematch').addEventListener('click', requestSentinelRematch);
@@ -4471,7 +4529,10 @@ document.getElementById('btn-result-ranking').addEventListener('click', ()=>{ sc
 document.getElementById('btn-rules-home').addEventListener('click', ()=>{ setRuleTab('solo'); showScreen('screen-rules'); });
 document.getElementById('btn-rules-back').addEventListener('click', ()=> showScreen('screen-home'));
 
-document.getElementById('btn-guess-enter').addEventListener('click', enterGuessMode);
+document.getElementById('btn-guess-enter').addEventListener('click', ()=>{
+  if (state.mode === 'open') declareOpenGuess();
+  else enterGuessMode();
+});
 document.getElementById('btn-guess-confirm').addEventListener('click', confirmGuess);
 
 document.getElementById('btn-retry').addEventListener('click', ()=>{
